@@ -135,8 +135,7 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full relative bg-cover bg-center bg-no-repeat flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 overflow-x-hidden text-slate-100 font-sans"
-      style={{ backgroundImage: `url('/background.png')` }}
+      className="min-h-screen w-full relative bg-cover bg-center bg-no-repeat flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 overflow-x-hidden text-slate-100 font-sans bg-[url('/mobile_background.png')] lg:bg-[url('/background.png')]"
     >
       {/* Dark Ambient Layer */}
       <div className="absolute inset-0 bg-black/45 backdrop-brightness-[0.92] pointer-events-none" />
