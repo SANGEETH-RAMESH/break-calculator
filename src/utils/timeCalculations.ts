@@ -215,15 +215,12 @@ export function calculateLiveShiftBreak(
 
   const elapsedMinutes = calculateElapsedMinutesBetween(shift.startTime, clock24);
 
-  // If in custom logout mode or during live shift where elapsed >= worked
+  // In custom logout mode or during live shift where elapsed >= worked
   let breakTaken: number;
-  if (mode === 'logout_time') {
-    breakTaken = Math.max(0, elapsedMinutes - workedMinutes);
-  } else if (elapsedMinutes >= workedMinutes && workedMinutes <= 120) {
-    // Early live shift (e.g. 6 mins into shift)
+  if (mode === 'logout_time' || elapsedMinutes >= workedMinutes) {
     breakTaken = Math.max(0, elapsedMinutes - workedMinutes);
   } else {
-    // Completed shift hours or standard calculation
+    // When workedMinutes > elapsedMinutes (e.g. testing full shift duration ahead of current clock)
     breakTaken = Math.max(0, workedMinutes - requiredWorkingMinutes);
   }
 
@@ -253,8 +250,8 @@ export function calculateLiveShiftBreak(
     breakLeftMinutes: breakLeft,
     breakTakenFormatted: formatMinutesToHHMM(breakTaken),
     breakLeftFormatted: formatMinutesToHHMM(breakLeft),
-    breakTakenHhMm: formatMinutesToBadge(breakTaken),
-    breakLeftHhMm: formatMinutesToBadge(breakLeft),
+    breakTakenHhMm: formatMinutesToHhMm(breakTaken),
+    breakLeftHhMm: formatMinutesToHhMm(breakLeft),
     breakTakenDisplay: formatMinutesToBadge(breakTaken),
     breakLeftDisplay: formatMinutesToBadge(breakLeft),
     workedHhMm,

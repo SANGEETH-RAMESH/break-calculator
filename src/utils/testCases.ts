@@ -1,5 +1,5 @@
 import { SHIFT_OPTIONS } from '../constants/shifts';
-import { parseTimeToMinutes, calculateBreak, validateWorkedMinutesForShift } from './timeCalculations';
+import { parseTimeToMinutes, calculateBreak, calculateLiveShiftBreak, validateWorkedMinutesForShift } from './timeCalculations';
 
 interface TestCase {
   shiftLabel: string;
@@ -78,6 +78,24 @@ export function runAllTestCases() {
     console.log('PASS: GBJ overtime rejected correctly:', gbjOverVal.error);
   } else {
     console.error('FAIL: GBJ overtime not rejected!');
+    allPassed = false;
+  }
+
+  // Test live shift break calculation (User scenario: Shift 1:00 PM – 10:30 PM, worked 3h 40m, current clock 16:50 / 16:51)
+  const shift4 = SHIFT_OPTIONS.find((s) => s.id === 'shift-4')!;
+  const liveResult10 = calculateLiveShiftBreak(shift4, 220, '16:50', 'current_time');
+  if (liveResult10.breakTakenMinutes === 10 && liveResult10.breakLeftMinutes === 50) {
+    console.log(`PASS: Live shift (16:50 clock, 3h 40m worked) -> Taken: ${liveResult10.breakTakenDisplay}, Left: ${liveResult10.breakLeftDisplay}`);
+  } else {
+    console.error(`FAIL: Expected Taken 10m, Left 50m. Got Taken ${liveResult10.breakTakenMinutes}m, Left ${liveResult10.breakLeftMinutes}m`);
+    allPassed = false;
+  }
+
+  const liveResult11 = calculateLiveShiftBreak(shift4, 220, '16:51', 'current_time');
+  if (liveResult11.breakTakenMinutes === 11 && liveResult11.breakLeftMinutes === 49) {
+    console.log(`PASS: Live shift (16:51 clock, 3h 40m worked) -> Taken: ${liveResult11.breakTakenDisplay}, Left: ${liveResult11.breakLeftDisplay}`);
+  } else {
+    console.error(`FAIL: Expected Taken 11m, Left 49m. Got Taken ${liveResult11.breakTakenMinutes}m, Left ${liveResult11.breakLeftMinutes}m`);
     allPassed = false;
   }
 
