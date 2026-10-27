@@ -1,12 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee, Sun, Sunset } from 'lucide-react';
 import { SHIFT_OPTIONS } from '../constants/shifts';
-import type { TimeCalculationMode } from '../types/shift';
-import { getCurrentClockTime24, formatMinutesToClockTime12h } from '../utils/timeCalculations';
+import type { TimeCalculationMode, DayType, ShiftHalf } from '../types/shift';
+import { getCurrentClockTime24, formatMinutesToClockTime12h, getHalfDayShiftTimes } from '../utils/timeCalculations';
 
 interface CalculatorFormProps {
   selectedShiftId: string;
   onSelectShift: (shiftId: string) => void;
+  dayType: DayType;
+  onChangeDayType: (val: DayType) => void;
+  shiftHalf: ShiftHalf;
+  onChangeShiftHalf: (val: ShiftHalf) => void;
   workedHours: string;
   onChangeWorkedHours: (val: string) => void;
   workedMinutes: string;
@@ -24,6 +28,10 @@ interface CalculatorFormProps {
 export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   selectedShiftId,
   onSelectShift,
+  dayType,
+  onChangeDayType,
+  shiftHalf,
+  onChangeShiftHalf,
   workedHours,
   onChangeWorkedHours,
   workedMinutes,
@@ -54,6 +62,9 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   }, []);
 
   const selectedShift = SHIFT_OPTIONS.find((s) => s.id === selectedShiftId);
+
+  const firstHalfTimes = selectedShift ? getHalfDayShiftTimes(selectedShift, 'first_half') : null;
+  const secondHalfTimes = selectedShift ? getHalfDayShiftTimes(selectedShift, 'second_half') : null;
 
   const liveDisplayTime = (() => {
     const [h, m] = currentClock.split(':').map(Number);
@@ -142,22 +153,23 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   const hasAnyTimeInput = Boolean(workedHours || workedMinutes || workedSeconds);
 
   return (
-    <form onSubmit={handleFormSubmit} className="h-full flex-1 flex flex-col justify-between gap-6" noValidate>
-      <div className="space-y-5">
-        {/* Step 1: Select Shift */}
+    <form onSubmit={handleFormSubmit} className="h-full flex-1 flex flex-col justify-between gap-5" noValidate>
+      <div className="space-y-4">
+        {/* Step 1: Select Shift & Shift Duration */}
         <div className="space-y-2">
           <div className="flex items-center gap-2.5">
             <div className="w-5 h-5 rounded-full bg-[#00e599] text-slate-950 font-extrabold text-xs flex items-center justify-center flex-shrink-0 shadow-sm">
               1
             </div>
             <div>
-              <h3 className="text-sm font-bold text-white leading-tight">Select Shift</h3>
-              <p className="text-[11px] text-slate-400">Choose your working shift</p>
+              <h3 className="text-sm font-bold text-white leading-tight">Select Shift & Duration</h3>
+              <p className="text-[11px] text-slate-400">Choose your shift and day type</p>
             </div>
           </div>
 
-          <div className="space-y-1.5 pt-0.5">
-            <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3.5 py-3 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
+          <div className="space-y-2 pt-0.5">
+            {/* Shift Select Dropdown */}
+            <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3.5 py-2.5 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
               <Calendar className="w-4 h-4 text-[#00e599] mr-3 flex-shrink-0" />
               <select
                 id="shift-select"
@@ -179,12 +191,99 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
               </div>
             </div>
 
+            {/* Day Type Selector: Full Day vs Half Day */}
+            <div className="grid grid-cols-2 gap-2 bg-[#0c1822] p-1 rounded-xl border border-slate-700/80">
+              <button
+                type="button"
+                id="daytype-full-btn"
+                onClick={() => onChangeDayType('full_day')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  dayType === 'full_day'
+                    ? 'bg-[#00e599] text-slate-950 shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                <Sun className="w-3.5 h-3.5" />
+                <span>Full Day</span>
+              </button>
+              <button
+                type="button"
+                id="daytype-half-btn"
+                onClick={() => onChangeDayType('half_day')}
+                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                  dayType === 'half_day'
+                    ? 'bg-[#00e599] text-slate-950 shadow-sm font-extrabold'
+                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                }`}
+              >
+                <Sunset className="w-3.5 h-3.5" />
+                <span>Half Day</span>
+              </button>
+            </div>
+
+            {/* If Half Day: Ask First Half vs Second Half */}
+            {dayType === 'half_day' && (
+              <div className="space-y-1.5 pt-1 animate-smooth-in">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[11px] font-bold text-slate-300">
+                    Which Half?
+                  </span>
+                  <span className="text-[10px] text-[#00e599] font-semibold">
+                    4:30 work + 30m break
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 bg-[#0c1822] p-1 rounded-xl border border-slate-700/80">
+                  <button
+                    type="button"
+                    id="shifthalf-first-btn"
+                    onClick={() => onChangeShiftHalf('first_half')}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center transition-all cursor-pointer ${
+                      shiftHalf === 'first_half'
+                        ? 'bg-[#00e599] text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <span className="font-extrabold text-xs">First Half</span>
+                    {firstHalfTimes && (
+                      <span className={`text-[10px] mt-0.5 leading-tight ${shiftHalf === 'first_half' ? 'text-slate-950 font-semibold' : 'text-slate-500'}`}>
+                        {firstHalfTimes.label.replace(' (1st Half)', '')}
+                      </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    id="shifthalf-second-btn"
+                    onClick={() => onChangeShiftHalf('second_half')}
+                    className={`py-2 px-2 rounded-lg text-xs font-bold flex flex-col items-center justify-center transition-all cursor-pointer ${
+                      shiftHalf === 'second_half'
+                        ? 'bg-[#00e599] text-slate-950 shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
+                    }`}
+                  >
+                    <span className="font-extrabold text-xs">Second Half</span>
+                    {secondHalfTimes && (
+                      <span className={`text-[10px] mt-0.5 leading-tight ${shiftHalf === 'second_half' ? 'text-slate-950 font-semibold' : 'text-slate-500'}`}>
+                        {secondHalfTimes.label.replace(' (2nd Half)', '')}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Shift Rules Info Badge */}
             {selectedShift && (
               <div className="flex items-center gap-1.5 text-[11px] text-slate-300 px-1 pt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00e599] flex-shrink-0" />
                 <span>
-                  {selectedShift.isGBJ ? (
+                  {dayType === 'half_day' ? (
+                    <>
+                      <strong className="text-[#00e599] font-bold">
+                        Half Day ({shiftHalf === 'first_half' ? '1st Half' : '2nd Half'}):
+                      </strong>{' '}
+                      5h total (4h 30m work required, 30m break)
+                    </>
+                  ) : selectedShift.isGBJ ? (
                     <>
                       <strong className="text-[#00e599] font-bold">GBJ Shift:</strong> 7h total (6h work required, 1h break)
                     </>

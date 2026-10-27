@@ -1,33 +1,39 @@
 import React from 'react';
 import { X, CheckCircle2, Play, Beaker } from 'lucide-react';
 import { SHIFT_OPTIONS } from '../constants/shifts';
+import type { DayType, ShiftHalf } from '../types/shift';
 
 interface TestScenario {
   id: number;
-  shiftType: 'Regular' | 'GBJ';
+  shiftType: 'Regular' | 'GBJ' | 'Half Day' | 'Over Break';
   workedTime: string;
   expectedBreakTaken: string;
   expectedBreakLeft: string;
   description: string;
+  dayType?: DayType;
+  shiftHalf?: ShiftHalf;
 }
 
 const TEST_SCENARIOS: TestScenario[] = [
-  { id: 1, shiftType: 'Regular', workedTime: '08:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Before required working hours (8h 30m)' },
-  { id: 2, shiftType: 'Regular', workedTime: '08:30', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Exactly at required working duration' },
-  { id: 3, shiftType: 'Regular', workedTime: '08:50', expectedBreakTaken: '00:20', expectedBreakLeft: '00:40', description: '20 minutes into break' },
-  { id: 4, shiftType: 'Regular', workedTime: '09:00', expectedBreakTaken: '00:30', expectedBreakLeft: '00:30', description: 'Halfway through 1h break' },
-  { id: 5, shiftType: 'Regular', workedTime: '09:30', expectedBreakTaken: '01:00', expectedBreakLeft: '00:00', description: 'Full 1h break consumed' },
-  { id: 6, shiftType: 'GBJ', workedTime: '05:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Before GBJ required working hours (6h)' },
-  { id: 7, shiftType: 'GBJ', workedTime: '06:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Exactly at GBJ required working duration' },
-  { id: 8, shiftType: 'GBJ', workedTime: '06:20', expectedBreakTaken: '00:20', expectedBreakLeft: '00:40', description: 'GBJ 20 minutes into break' },
-  { id: 9, shiftType: 'GBJ', workedTime: '06:30', expectedBreakTaken: '00:30', expectedBreakLeft: '00:30', description: 'GBJ halfway through break' },
-  { id: 10, shiftType: 'GBJ', workedTime: '07:00', expectedBreakTaken: '01:00', expectedBreakLeft: '00:00', description: 'GBJ full 1h break consumed' },
+  { id: 1, shiftType: 'Regular', workedTime: '08:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Before required working hours (8h 30m)', dayType: 'full_day' },
+  { id: 2, shiftType: 'Regular', workedTime: '08:30', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Exactly at required working duration', dayType: 'full_day' },
+  { id: 3, shiftType: 'Regular', workedTime: '08:50', expectedBreakTaken: '00:20', expectedBreakLeft: '00:40', description: '20 minutes into break', dayType: 'full_day' },
+  { id: 4, shiftType: 'Regular', workedTime: '09:00', expectedBreakTaken: '00:30', expectedBreakLeft: '00:30', description: 'Halfway through 1h break', dayType: 'full_day' },
+  { id: 5, shiftType: 'Regular', workedTime: '09:30', expectedBreakTaken: '01:00', expectedBreakLeft: '00:00', description: 'Full 1h break consumed', dayType: 'full_day' },
+  { id: 6, shiftType: 'GBJ', workedTime: '05:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Before GBJ required working hours (6h)', dayType: 'full_day' },
+  { id: 7, shiftType: 'GBJ', workedTime: '06:00', expectedBreakTaken: '00:00', expectedBreakLeft: '01:00', description: 'Exactly at GBJ required working duration', dayType: 'full_day' },
+  { id: 8, shiftType: 'GBJ', workedTime: '06:20', expectedBreakTaken: '00:20', expectedBreakLeft: '00:40', description: 'GBJ 20 minutes into break', dayType: 'full_day' },
+  { id: 9, shiftType: 'GBJ', workedTime: '06:30', expectedBreakTaken: '00:30', expectedBreakLeft: '00:30', description: 'GBJ halfway through break', dayType: 'full_day' },
+  { id: 10, shiftType: 'GBJ', workedTime: '07:00', expectedBreakTaken: '01:00', expectedBreakLeft: '00:00', description: 'GBJ full 1h break consumed', dayType: 'full_day' },
+  { id: 11, shiftType: 'Half Day', workedTime: '04:30', expectedBreakTaken: '00:00', expectedBreakLeft: '00:30', description: 'Half Day (4h 30m work, 30m break)', dayType: 'half_day', shiftHalf: 'first_half' },
+  { id: 12, shiftType: 'Half Day', workedTime: '04:50', expectedBreakTaken: '00:20', expectedBreakLeft: '00:10', description: 'Half Day 20m into 30m break', dayType: 'half_day', shiftHalf: 'first_half' },
+  { id: 13, shiftType: 'Over Break', workedTime: '05:15', expectedBreakTaken: '00:45', expectedBreakLeft: '00:00', description: 'Half Day 15m over allowed break (45m taken)', dayType: 'half_day', shiftHalf: 'first_half' },
 ];
 
 interface TestScenariosModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onApplyScenario: (shiftId: string, workedTime: string) => void;
+  onApplyScenario: (shiftId: string, workedTime: string, dayType?: DayType, shiftHalf?: ShiftHalf) => void;
 }
 
 export const TestScenariosModal: React.FC<TestScenariosModalProps> = ({
@@ -80,6 +86,10 @@ export const TestScenariosModal: React.FC<TestScenariosModalProps> = ({
                       className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
                         scenario.shiftType === 'GBJ'
                           ? 'bg-amber-950/80 border border-amber-800/80 text-amber-300'
+                          : scenario.shiftType === 'Half Day'
+                          ? 'bg-cyan-950/80 border border-cyan-800/80 text-cyan-300'
+                          : scenario.shiftType === 'Over Break'
+                          ? 'bg-rose-950/80 border border-rose-800/80 text-rose-300'
                           : 'bg-emerald-950/80 border border-emerald-800/80 text-emerald-300'
                       }`}
                     >
@@ -99,7 +109,7 @@ export const TestScenariosModal: React.FC<TestScenariosModalProps> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    onApplyScenario(shift.id, scenario.workedTime);
+                    onApplyScenario(shift.id, scenario.workedTime, scenario.dayType, scenario.shiftHalf);
                     onClose();
                   }}
                   className="flex items-center gap-1.5 text-xs font-bold bg-[#00e599] hover:bg-[#00c885] text-slate-950 px-3 py-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer"
@@ -115,7 +125,7 @@ export const TestScenariosModal: React.FC<TestScenariosModalProps> = ({
         {/* Footer info */}
         <div className="mt-5 pt-3 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
           <span className="flex items-center gap-1.5 text-[#00e599] font-medium">
-            <CheckCircle2 className="w-4 h-4" /> 10 / 10 cases passing
+            <CheckCircle2 className="w-4 h-4" /> 13 / 13 cases passing
           </span>
           <button
             type="button"

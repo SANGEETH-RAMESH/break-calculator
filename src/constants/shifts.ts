@@ -12,6 +12,12 @@ export const GBJ_SHIFT_RULES: ShiftRule = {
   allowedBreakMinutes: 60,       // 1 hour
 };
 
+export const HALF_DAY_RULES: ShiftRule = {
+  shiftDurationMinutes: 300,     // 5 hours
+  requiredWorkingMinutes: 270,   // 4 hours 30 minutes
+  allowedBreakMinutes: 30,       // 30 minutes
+};
+
 export const SHIFT_OPTIONS: Shift[] = [
   {
     id: 'shift-1',

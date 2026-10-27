@@ -81,6 +81,30 @@ export function runAllTestCases() {
     allPassed = false;
   }
 
+  // Half day validation tests
+  const halfDayCases = [
+    { worked: '04:00', expectedTaken: '00:00', expectedLeft: '00:30', excess: 0 },
+    { worked: '04:30', expectedTaken: '00:00', expectedLeft: '00:30', excess: 0 },
+    { worked: '04:45', expectedTaken: '00:15', expectedLeft: '00:15', excess: 0 },
+    { worked: '05:00', expectedTaken: '00:30', expectedLeft: '00:00', excess: 0 },
+    { worked: '05:15', expectedTaken: '00:45', expectedLeft: '00:00', excess: 15 },
+  ];
+
+  for (const hdc of halfDayCases) {
+    const parsed = parseTimeToMinutes(hdc.worked);
+    const hdResult = calculateBreak(regularShift, parsed.minutes!, 'half_day', 'first_half');
+    if (
+      hdResult.breakTakenFormatted === hdc.expectedTaken &&
+      hdResult.breakLeftFormatted === hdc.expectedLeft &&
+      (hdResult.excessBreakMinutes || 0) === hdc.excess
+    ) {
+      console.log(`PASS: Half Day ${hdc.worked} -> Taken: ${hdResult.breakTakenFormatted}, Left: ${hdResult.breakLeftFormatted}, Excess: ${hdResult.excessBreakMinutes || 0}m`);
+    } else {
+      console.error(`FAIL: Half Day ${hdc.worked}. Got Taken=${hdResult.breakTakenFormatted}, Left=${hdResult.breakLeftFormatted}, Excess=${hdResult.excessBreakMinutes}`);
+      allPassed = false;
+    }
+  }
+
   // Test live shift break calculation (User scenario: Shift 1:00 PM – 10:30 PM, worked 3h 40m, current clock 16:50 / 16:51)
   const shift4 = SHIFT_OPTIONS.find((s) => s.id === 'shift-4')!;
   const liveResult10 = calculateLiveShiftBreak(shift4, 220, '16:50', 'current_time');
@@ -96,6 +120,15 @@ export function runAllTestCases() {
     console.log(`PASS: Live shift (16:51 clock, 3h 40m worked) -> Taken: ${liveResult11.breakTakenDisplay}, Left: ${liveResult11.breakLeftDisplay}`);
   } else {
     console.error(`FAIL: Expected Taken 11m, Left 49m. Got Taken ${liveResult11.breakTakenMinutes}m, Left ${liveResult11.breakLeftMinutes}m`);
+    allPassed = false;
+  }
+
+  // Test live half day shift (1st half of shift-4: 13:00 to 18:00. Clock at 17:00 -> elapsed 240m (4h). Worked 200m (3h 20m) -> Break taken 40m. Allowed 30m -> Over break 10m!)
+  const liveHalfDayOver = calculateLiveShiftBreak(shift4, 200, '17:00', 'current_time', 0, 'half_day', 'first_half');
+  if (liveHalfDayOver.breakTakenMinutes === 40 && liveHalfDayOver.breakLeftMinutes === 0 && liveHalfDayOver.excessBreakMinutes === 10) {
+    console.log(`PASS: Live Half Day Over Break -> Taken: ${liveHalfDayOver.breakTakenDisplay}, Left: ${liveHalfDayOver.breakLeftDisplay}, Over: ${liveHalfDayOver.excessBreakDisplay}`);
+  } else {
+    console.error(`FAIL: Expected Taken 40m, Left 0m, Over 10m. Got Taken ${liveHalfDayOver.breakTakenMinutes}m, Left ${liveHalfDayOver.breakLeftMinutes}m, Over ${liveHalfDayOver.excessBreakMinutes}m`);
     allPassed = false;
   }
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { SHIFT_OPTIONS } from './constants/shifts';
-import type { CalculationResult, TimeCalculationMode } from './types/shift';
+import type { CalculationResult, TimeCalculationMode, DayType, ShiftHalf } from './types/shift';
 import {
   parseTimeToMinutes,
   calculateLiveShiftBreak,
@@ -12,8 +12,10 @@ import { ResultsDisplay } from './components/ResultsDisplay';
 import { TestScenariosModal } from './components/TestScenariosModal';
 
 export const App: React.FC = () => {
-  // Clean initial state with NO default values
+  // Clean initial state with NO default values, default full day
   const [selectedShiftId, setSelectedShiftId] = useState<string>('');
+  const [dayType, setDayType] = useState<DayType>('full_day');
+  const [shiftHalf, setShiftHalf] = useState<ShiftHalf>('first_half');
   const [workedHours, setWorkedHours] = useState<string>('');
   const [workedMinutes, setWorkedMinutes] = useState<string>('');
   const [workedSeconds, setWorkedSeconds] = useState<string>('');
@@ -87,8 +89,16 @@ export const App: React.FC = () => {
 
     setErrorMessage(null);
 
-    // Calculate break results from worked time (supporting optional seconds)
-    const calculated = calculateLiveShiftBreak(shift, totalMinutes, refClock24, calculationMode, s);
+    // Calculate break results from worked time (supporting optional seconds, day type, and shift half)
+    const calculated = calculateLiveShiftBreak(
+      shift,
+      totalMinutes,
+      refClock24,
+      calculationMode,
+      s,
+      dayType,
+      shiftHalf
+    );
     setResult(calculated);
 
     // Switch mobile view to show ONLY 2nd table
@@ -97,8 +107,15 @@ export const App: React.FC = () => {
   };
 
   // Preset helper for test modal
-  const handleApplyPreset = (shiftId: string, workedTimeStr: string) => {
+  const handleApplyPreset = (
+    shiftId: string,
+    workedTimeStr: string,
+    presetDayType: DayType = 'full_day',
+    presetShiftHalf: ShiftHalf = 'first_half'
+  ) => {
     setSelectedShiftId(shiftId);
+    setDayType(presetDayType);
+    setShiftHalf(presetShiftHalf);
     setErrorMessage(null);
 
     const parts = workedTimeStr.split(':');
@@ -110,7 +127,7 @@ export const App: React.FC = () => {
     if (shift) {
       const parsed = parseTimeToMinutes(workedTimeStr);
       if (parsed.isValid && parsed.minutes !== undefined) {
-        const res = calculateBreak(shift, parsed.minutes);
+        const res = calculateBreak(shift, parsed.minutes, presetDayType, presetShiftHalf);
         setResult(res);
         setMobileView('results');
         setAnimationKey((prev) => prev + 1);
@@ -120,6 +137,8 @@ export const App: React.FC = () => {
 
   const handleReset = () => {
     setSelectedShiftId('');
+    setDayType('full_day');
+    setShiftHalf('first_half');
     setWorkedHours('');
     setWorkedMinutes('');
     setWorkedSeconds('');
@@ -193,6 +212,16 @@ export const App: React.FC = () => {
                   setSelectedShiftId(id);
                   if (errorMessage) setErrorMessage(null);
                 }}
+                dayType={dayType}
+                onChangeDayType={(dt) => {
+                  setDayType(dt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                shiftHalf={shiftHalf}
+                onChangeShiftHalf={(sh) => {
+                  setShiftHalf(sh);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 workedHours={workedHours}
                 onChangeWorkedHours={(val) => {
                   setWorkedHours(val);
@@ -242,6 +271,16 @@ export const App: React.FC = () => {
                   setSelectedShiftId(id);
                   if (errorMessage) setErrorMessage(null);
                 }}
+                dayType={dayType}
+                onChangeDayType={(dt) => {
+                  setDayType(dt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                shiftHalf={shiftHalf}
+                onChangeShiftHalf={(sh) => {
+                  setShiftHalf(sh);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 workedHours={workedHours}
                 onChangeWorkedHours={(val) => {
                   setWorkedHours(val);
@@ -285,6 +324,16 @@ export const App: React.FC = () => {
                 selectedShiftId={selectedShiftId}
                 onSelectShift={(id) => {
                   setSelectedShiftId(id);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                dayType={dayType}
+                onChangeDayType={(dt) => {
+                  setDayType(dt);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                shiftHalf={shiftHalf}
+                onChangeShiftHalf={(sh) => {
+                  setShiftHalf(sh);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 workedHours={workedHours}
