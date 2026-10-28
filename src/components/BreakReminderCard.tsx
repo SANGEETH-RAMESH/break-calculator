@@ -21,6 +21,7 @@ export interface BreakReminderState {
   duration: number;
   unit: 'Minutes' | 'Seconds';
   targetTimestamp: number | null;
+  serverPushScheduled?: boolean;
 }
 
 interface BreakReminderCardProps {
@@ -70,13 +71,14 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
   };
 
   const handleSave = async () => {
+    let serverScheduled = false;
     if (enabled && pushEnabled) {
       const granted = await requestNotificationPermission();
       if (!granted && !soundEnabled) {
         setPermissionNotice('Please allow notifications or enable sound alert.');
       } else if (granted) {
         // Schedule server-side Web Push for true background delivery on iPhone & mobile!
-        subscribeAndSchedulePush(Math.max(1, duration), unit);
+        serverScheduled = await subscribeAndSchedulePush(Math.max(1, duration), unit);
       }
     }
 
@@ -90,6 +92,7 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
       duration: Math.max(1, duration),
       unit,
       targetTimestamp,
+      serverPushScheduled: serverScheduled,
     });
 
     setSavedSuccess(true);

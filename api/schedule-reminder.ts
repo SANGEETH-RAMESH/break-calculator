@@ -26,6 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const result = await client.publishJSON({
         url: destinationUrl,
         delay, // delay in seconds
+        retries: 0, // ensure strictly only 1 push notification is delivered
         body: {
           subscription,
           duration,

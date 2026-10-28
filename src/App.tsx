@@ -112,8 +112,8 @@ export const App: React.FC = () => {
 
       if (diff <= 0) {
         setRemainingSeconds(0);
-        // Trigger notifications
-        if (reminderState.pushEnabled) {
+        // Only trigger local push if server push was NOT already scheduled
+        if (reminderState.pushEnabled && !reminderState.serverPushScheduled) {
           triggerBreakNotification(
             `${reminderState.duration} ${reminderState.unit.toLowerCase()}`
           );
