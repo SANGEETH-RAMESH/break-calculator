@@ -6,8 +6,12 @@ import { calculateLiveShiftBreak } from './utils/timeCalculations';
 import { Header } from './components/Header';
 import { CalculatorForm } from './components/CalculatorForm';
 import { ResultsDisplay } from './components/ResultsDisplay';
+import { OverbreakModal } from './components/OverbreakModal';
+import { BreakReminderCard, type BreakReminderState } from './components/BreakReminderCard';
+import { triggerBreakNotification, playBreakAlertSound } from './utils/reminderSound';
 
 const DEFAULT_SHIFT_STORAGE_KEY = 'break_calculator_default_shift';
+const REMINDER_STORAGE_KEY = 'break_calculator_reminder_config';
 
 export const App: React.FC = () => {
   // Load default shift from localStorage if previously selected
@@ -35,19 +39,134 @@ export const App: React.FC = () => {
   const [timePeriod, setTimePeriod] = useState<TimePeriod>(() => getCurrentTimePeriod());
 
   useEffect(() => {
+    // Check every second so the background changes automatically without refresh
+    // at exact period boundaries (e.g., 14:59 -> 15:00)
     const timer = setInterval(() => {
-      setTimePeriod(getCurrentTimePeriod());
-    }, 15000);
+      setTimePeriod((prev) => {
+        const next = getCurrentTimePeriod();
+        return prev === next ? prev : next;
+      });
+    }, 1000);
     return () => clearInterval(timer);
   }, []);
 
   // Result starts as null so initially only the first card/table is displayed
   const [result, setResult] = useState<CalculationResult | null>(null);
 
+  // Overbreak Popup Modal state (triggered when break taken exceeds allowed limit)
+  const [isOverbreakModalOpen, setIsOverbreakModalOpen] = useState<boolean>(false);
+
   // Mobile navigation state: initially 'form' (Table 1), toggles to 'results' (Table 2) upon calculation
   const [mobileView, setMobileView] = useState<'form' | 'results'>('form');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Break Reminder configuration and active countdown state
+  const [reminderState, setReminderState] = useState<BreakReminderState>(() => {
+    try {
+      const saved = localStorage.getItem(REMINDER_STORAGE_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      enabled: true,
+      pushEnabled: true,
+      soundEnabled: false,
+      duration: 25,
+      unit: 'Minutes',
+      targetTimestamp: null,
+    };
+  });
+
+  const [remainingSeconds, setRemainingSeconds] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem(REMINDER_STORAGE_KEY);
+      if (saved) {
+        const parsed: BreakReminderState = JSON.parse(saved);
+        if (parsed.targetTimestamp) {
+          const diff = Math.round((parsed.targetTimestamp - Date.now()) / 1000);
+          return diff > 0 ? diff : 0;
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
+
+  // Main View: 'calculator' (default) or 'reminder' (inline Break Reminder card)
+  const [mainView, setMainView] = useState<'calculator' | 'reminder'>('calculator');
+
+  // Countdown timer effect for active Break Reminder
+  useEffect(() => {
+    if (!reminderState.targetTimestamp) {
+      return;
+    }
+
+    const checkTimer = () => {
+      if (!reminderState.targetTimestamp) return;
+      const diff = Math.round((reminderState.targetTimestamp - Date.now()) / 1000);
+
+      if (diff <= 0) {
+        setRemainingSeconds(0);
+        // Trigger notifications
+        if (reminderState.pushEnabled) {
+          triggerBreakNotification(
+            `${reminderState.duration} ${reminderState.unit.toLowerCase()}`
+          );
+        }
+        if (reminderState.soundEnabled) {
+          playBreakAlertSound();
+        }
+
+        // Reset targetTimestamp
+        setReminderState((prev) => {
+          const next = { ...prev, targetTimestamp: null };
+          try {
+            localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(next));
+          } catch {
+            // ignore
+          }
+          return next;
+        });
+      } else {
+        setRemainingSeconds(diff);
+      }
+    };
+
+    checkTimer();
+    const timerId = setInterval(checkTimer, 1000);
+    return () => clearInterval(timerId);
+  }, [reminderState]);
+
+  const handleSaveReminder = (newState: BreakReminderState) => {
+    setReminderState(newState);
+    try {
+      localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(newState));
+    } catch {
+      // ignore
+    }
+    if (newState.targetTimestamp) {
+      const diff = Math.round((newState.targetTimestamp - Date.now()) / 1000);
+      setRemainingSeconds(Math.max(0, diff));
+    } else {
+      setRemainingSeconds(null);
+    }
+  };
+
+  const handleStopReminder = () => {
+    const updated = { ...reminderState, targetTimestamp: null };
+    setReminderState(updated);
+    try {
+      localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(updated));
+    } catch {
+      // ignore
+    }
+    setRemainingSeconds(null);
+  };
 
   // When a user selects a shift, save it as their default in localStorage
   const handleSelectShift = (id: string) => {
@@ -118,6 +237,13 @@ export const App: React.FC = () => {
     );
     setResult(calculated);
 
+    // If break taken exceeds allowed limit, automatically pop up the Overbreak Modal
+    if (calculated.breakTakenMinutes > calculated.totalAllowedBreakMinutes) {
+      setIsOverbreakModalOpen(true);
+    } else {
+      setIsOverbreakModalOpen(false);
+    }
+
     // Switch mobile view to show ONLY 2nd table
     setMobileView('results');
     setAnimationKey((prev) => prev + 1);
@@ -144,6 +270,7 @@ export const App: React.FC = () => {
     setWorkedSeconds('');
     setErrorMessage(null);
     setResult(null);
+    setIsOverbreakModalOpen(false);
     setMobileView('form');
     setAnimationKey((prev) => prev + 1);
   };
@@ -152,10 +279,21 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className={`min-h-screen w-full relative bg-cover bg-center bg-no-repeat flex flex-col justify-center items-center p-2 sm:p-4 lg:py-3 lg:px-6 overflow-x-hidden text-slate-100 font-sans transition-all duration-700 bg-period-${timePeriod}`}
+      className="min-h-screen w-full relative flex flex-col justify-center items-center p-2 sm:p-4 lg:py-3 lg:px-6 overflow-x-hidden text-slate-100 font-sans bg-[#070e14]"
     >
+      {/* Background Layers with 1-second Smooth Cross-fade (Preloaded & Zero Flicker) */}
+      {(['morning', 'noon', 'evening', 'night'] as const).map((period) => (
+        <div
+          key={period}
+          aria-hidden={timePeriod !== period}
+          className={`absolute inset-0 bg-cover bg-center bg-no-repeat transition-opacity duration-1000 ease-in-out bg-period-${period} ${
+            timePeriod === period ? 'opacity-100 z-0' : 'opacity-0 pointer-events-none'
+          }`}
+        />
+      ))}
+
       {/* Dark Ambient Layer */}
-      <div className="absolute inset-0 bg-black/45 backdrop-brightness-[0.92] pointer-events-none" />
+      <div className="absolute inset-0 bg-black/45 backdrop-brightness-[0.92] pointer-events-none z-[1]" />
 
       {/* Top Right Calligraphy: "Good Breaks Better Work" */}
       <div className="absolute top-4 right-6 pointer-events-none hidden md:block z-10 text-right select-none">
@@ -190,20 +328,47 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div
-        className={`relative z-20 w-full transition-all duration-600 ease-out ${
-          isCalculated ? 'max-w-5xl xl:max-w-6xl' : 'max-w-[430px]'
+        className={`relative z-20 w-full transition-all duration-500 ease-out ${
+          mainView === 'reminder'
+            ? 'max-w-[480px]'
+            : isCalculated
+            ? 'max-w-6xl xl:max-w-7xl'
+            : 'max-w-[460px]'
         }`}
       >
         {/* Top Header Bar */}
-        <Header onReset={handleReset} />
+        <Header
+          onReset={handleReset}
+          onToggleReminderView={() =>
+            setMainView((prev) => (prev === 'reminder' ? 'calculator' : 'reminder'))
+          }
+          activeView={mainView}
+          isReminderRunning={Boolean(
+            reminderState.targetTimestamp && remainingSeconds !== null && remainingSeconds > 0
+          )}
+          remainingSeconds={remainingSeconds}
+        />
 
-        {/* ============================================================== */}
-        {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Exact Same Height) */}
-        {/* ============================================================== */}
+        {/* In-Page View Switch: Break Reminder Card vs Calculator */}
+        {mainView === 'reminder' ? (
+          <div className="w-full flex justify-center animate-in fade-in zoom-in-95 duration-200">
+            <BreakReminderCard
+              reminderState={reminderState}
+              onSaveReminder={handleSaveReminder}
+              onStopReminder={handleStopReminder}
+              remainingSeconds={remainingSeconds}
+              onBackToCalculator={() => setMainView('calculator')}
+            />
+          </div>
+        ) : (
+          <>
+            {/* ============================================================== */}
+            {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Exact Same Height) */}
+            {/* ============================================================== */}
         {isCalculated ? (
-          <div className="hidden lg:grid grid-cols-12 gap-5 items-stretch w-full">
+          <div className="hidden lg:grid grid-cols-12 gap-6 items-stretch w-full">
             {/* Card 1: Calculator Form */}
-            <div className="col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-4.5 shadow-2xl flex flex-col justify-between h-full min-h-0 transition-all duration-300">
+            <div className="col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 transition-all duration-300">
               <CalculatorForm
                 selectedShiftId={selectedShiftId}
                 onSelectShift={handleSelectShift}
@@ -247,13 +412,14 @@ export const App: React.FC = () => {
               <ResultsDisplay
                 result={result}
                 animationKey={animationKey}
+                onOpenOverbreakModal={() => setIsOverbreakModalOpen(true)}
               />
             </div>
           </div>
         ) : (
           <div className="hidden lg:flex justify-center w-full">
             {/* Card 1 Alone (Centered before calculation) */}
-            <div className="w-[430px] bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-4.5 shadow-2xl flex flex-col justify-between min-h-0 transition-all duration-300">
+            <div className="w-[460px] bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between min-h-0 transition-all duration-300">
               <CalculatorForm
                 selectedShiftId={selectedShiftId}
                 onSelectShift={handleSelectShift}
@@ -347,11 +513,21 @@ export const App: React.FC = () => {
                 result={result}
                 animationKey={animationKey}
                 onBackToForm={() => setMobileView('form')}
+                onOpenOverbreakModal={() => setIsOverbreakModalOpen(true)}
               />
             </div>
           )}
         </div>
+          </>
+        )}
       </div>
+
+      {/* Overbreak Alert Popup Modal ("Thambi Thappu!") */}
+      <OverbreakModal
+        isOpen={isOverbreakModalOpen}
+        onClose={() => setIsOverbreakModalOpen(false)}
+        result={result}
+      />
     </div>
   );
 };

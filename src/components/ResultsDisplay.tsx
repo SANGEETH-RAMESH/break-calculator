@@ -6,12 +6,14 @@ interface ResultsDisplayProps {
   result: CalculationResult | null;
   animationKey?: number;
   onBackToForm?: () => void;
+  onOpenOverbreakModal?: () => void;
 }
 
 export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
   result,
   animationKey = 0,
   onBackToForm,
+  onOpenOverbreakModal,
 }) => {
   const [isAnimated, setIsAnimated] = useState(false);
 
@@ -47,9 +49,9 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
   const currentProgress = isAnimated ? (isReady ? breakPercentage : 16.7) : 0;
 
   return (
-    <div className="w-full flex-1 h-full min-h-0 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-4.5 shadow-2xl flex flex-col justify-between gap-2.5 transition-all duration-300">
+    <div className="w-full flex-1 h-full min-h-0 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between gap-3.5 transition-all duration-300">
       {/* Top Section: Header & Breakdown Info Strip */}
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {/* Mobile-Only Back Button */}
         {onBackToForm && (
           <button
@@ -65,21 +67,23 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
         {/* Header Row */}
         <div className="flex items-center justify-between pb-0.5">
           <div>
-            <h2 className="text-base sm:text-lg font-extrabold text-white leading-tight tracking-tight">
+            <h2 className="text-lg sm:text-xl font-extrabold text-white leading-tight tracking-tight">
               Your Break Status
             </h2>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-normal">
+            <p className="text-xs text-slate-400 mt-0.5 font-normal">
               {result?.dayType === 'half_day' ? 'Half Day break calculation' : "Here's how your break looks so far"}
             </p>
           </div>
 
           {/* Status Pill Badge */}
           <div
-            className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold flex items-center gap-1.5 border shadow-2xs transition-colors duration-300 ${
+            onClick={isExceeded && onOpenOverbreakModal ? onOpenOverbreakModal : undefined}
+            className={`px-3 py-1 rounded-full text-xs font-semibold flex items-center gap-1.5 border shadow-2xs transition-all duration-300 ${
               isExceeded
-                ? 'bg-rose-950/80 border-rose-700/80 text-rose-300'
+                ? 'bg-rose-950/80 border-rose-700/80 text-rose-300 cursor-pointer hover:scale-105 active:scale-95 hover:border-rose-500'
                 : 'bg-[#0a271d] border-[#14533d] text-[#00e599]'
             }`}
+            title={isExceeded ? 'Click to view Overbreak alert popup' : undefined}
           >
             <span
               className={`w-1.5 h-1.5 rounded-full ${
@@ -95,66 +99,65 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
         </div>
 
         {/* Real-time Calculation Breakdown Context Strip */}
-        <div className="bg-[#101e29] border border-slate-700/60 rounded-xl px-3 py-1.5 text-[11px] text-slate-400 flex flex-wrap items-center justify-between gap-y-1 gap-x-2 shadow-inner">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span>Shift:</span>
+        <div className="bg-[#101e29] border border-slate-700/60 rounded-xl px-3.5 py-2 text-xs text-slate-300 flex flex-wrap items-center gap-x-3 gap-y-1.5 shadow-inner">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Shift:</span>
             <strong className="text-white font-bold">
               {result?.effectiveShiftLabel || `${result?.shift.startTime || '13:00'} – ${result?.shift.endTime || '22:30'}`}
             </strong>
             {result?.dayType === 'half_day' && (
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-emerald-950/80 border border-emerald-800 text-emerald-300">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950/80 border border-emerald-800 text-emerald-300 ml-1">
                 {result?.shift.isGBJ ? 'GBJ Half Day' : 'Half Day'} ({result.shiftHalf === 'first_half' ? '1st Half' : '2nd Half'})
               </span>
             )}
-            <span className="text-slate-600 font-bold">•</span>
-            <span>Login:</span>
+          </div>
+          <span className="text-slate-600 font-bold">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Login:</span>
             <strong className="text-white font-bold">
               {result?.actualLoginTimeFormatted || result?.scheduledStartTime || '09:00 AM'}
             </strong>
             {result?.attendanceStatus === 'late_reporting' ? (
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-950/90 border border-amber-700 text-amber-300">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-700 text-amber-300 ml-1">
                 Late Reporting (+{result.lateMinutes}m)
               </span>
             ) : result?.attendanceStatus === 'late_login' ? (
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950/90 border border-rose-700 text-rose-300">
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-950/90 border border-rose-700 text-rose-300 ml-1">
                 Late Login (+{result.lateMinutes}m)
               </span>
             ) : result?.lateMinutes && result.lateMinutes > 0 ? (
-              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950/90 border border-emerald-700 text-emerald-300">
-                {result.lateMinutes}m Grace (On Time)
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-700 text-emerald-300 ml-1">
+                {result.lateMinutes}m Grace
               </span>
             ) : null}
-            <span className="text-slate-600 font-bold">•</span>
-            <span>Logout:</span>
+          </div>
+          <span className="text-slate-600 font-bold">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Logout:</span>
             <strong className="text-[#00e599] font-bold">
               {result?.expectedLogoutTime || '06:00 PM'}
             </strong>
-            <span className="text-slate-600 font-bold">•</span>
-            <span>Elapsed:</span>
+          </div>
+          <span className="text-slate-600 font-bold">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Elapsed:</span>
             <strong className="text-cyan-400 font-bold">{result?.elapsedHhMm || '00h 16m 00s'}</strong>
-            <span className="text-slate-600 font-bold">•</span>
-            <span>Work left:</span>
+          </div>
+          <span className="text-slate-600 font-bold">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400 font-medium">Work left:</span>
             <strong className="text-white font-bold">{result?.workLeftHhMm || '08h 24m 00s'}</strong>
-            {isExceeded && (
-              <>
-                <span className="text-slate-600 font-bold">•</span>
-                <span className="text-rose-400 font-bold flex items-center gap-1">
-                  <AlertTriangle className="w-3 h-3" />
-                  Over Break: +{result?.excessBreakDisplay || `${excessMins}m 00s`}
-                </span>
-              </>
-            )}
           </div>
         </div>
 
         {/* Middle Split: Circular Donut Gauge (Left) + Stacked Metric Cards (Right) */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 items-center pt-0.5">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center pt-1">
           {/* Dual-Arc Donut Gauge with Floating Badges (Left) */}
-          <div className="md:col-span-6 flex flex-col items-center justify-center relative p-1 select-none">
-            <div className="relative w-36 h-36 sm:w-40 sm:h-40 flex items-center justify-center">
+          <div className="md:col-span-5 flex flex-col items-center justify-center relative p-2 select-none">
+            <div className="relative w-44 h-44 sm:w-48 sm:h-48 flex items-center justify-center">
               {/* Floating Orange Badge (Break Taken) */}
               <div
-                className={`absolute top-1 right-1 sm:right-2 z-10 bg-[#ea580c] hover:bg-[#d97706] text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-[0_4px_10px_rgba(234,88,12,0.4)] transition-all duration-500 animate-badge-float cursor-default ${
+                className={`absolute top-2 right-2 sm:right-3 z-10 bg-[#ea580c] hover:bg-[#d97706] text-white text-xs font-bold px-3 py-1 rounded-xl shadow-[0_4px_12px_rgba(234,88,12,0.4)] transition-all duration-500 animate-badge-float cursor-default ${
                   isAnimated ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
                 }`}
                 title="Break Taken"
@@ -165,17 +168,17 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
               {/* Floating Bottom Badge: Break Left OR Over Break Taken */}
               {isExceeded ? (
                 <div
-                  className={`absolute bottom-1 left-0 sm:left-1 z-10 bg-rose-600 hover:bg-rose-700 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-lg shadow-[0_4px_10px_rgba(225,29,72,0.4)] transition-all duration-500 animate-badge-float cursor-default flex items-center gap-1 ${
+                  className={`absolute bottom-2 left-1 sm:left-2 z-10 bg-rose-600 hover:bg-rose-700 text-white text-xs font-extrabold px-3 py-1 rounded-xl shadow-[0_4px_12px_rgba(225,29,72,0.4)] transition-all duration-500 animate-badge-float cursor-default flex items-center gap-1 ${
                     isAnimated ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
                   }`}
                   title="Over Break Taken"
                 >
-                  <AlertTriangle className="w-3 h-3" />
+                  <AlertTriangle className="w-3.5 h-3.5" />
                   <span>+{result?.excessBreakDisplay || `${excessMins}m 00s`}</span>
                 </div>
               ) : (
                 <div
-                  className={`absolute bottom-1 left-0 sm:left-1 z-10 bg-[#0284c7] hover:bg-[#0369a1] text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-[0_4px_10px_rgba(2,132,199,0.4)] transition-all duration-500 animate-badge-float cursor-default ${
+                  className={`absolute bottom-2 left-1 sm:left-2 z-10 bg-[#0284c7] hover:bg-[#0369a1] text-white text-xs font-bold px-3 py-1 rounded-xl shadow-[0_4px_12px_rgba(2,132,199,0.4)] transition-all duration-500 animate-badge-float cursor-default ${
                     isAnimated ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
                   }`}
                   title="Break Left"
@@ -192,7 +195,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   cy="80"
                   r={radius}
                   className="stroke-[#13222d]"
-                  strokeWidth="12"
+                  strokeWidth="13"
                   fill="none"
                 />
 
@@ -203,7 +206,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                     cy="80"
                     r={radius}
                     className="stroke-[#0284c7] donut-arc-blue"
-                    strokeWidth="12"
+                    strokeWidth="13"
                     strokeDasharray={`${blueArcLength} ${circumference}`}
                     strokeDashoffset={-orangeArcLength}
                     strokeLinecap="round"
@@ -220,7 +223,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                   cy="80"
                   r={radius}
                   className={isExceeded ? 'stroke-rose-500' : 'stroke-[#ea580c] donut-arc-orange'}
-                  strokeWidth="12"
+                  strokeWidth="13"
                   strokeDasharray={`${orangeArcLength} ${circumference}`}
                   strokeDashoffset={0}
                   strokeLinecap="round"
@@ -236,96 +239,96 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
               {/* Center Icon: Clean Coffee Cup */}
               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                 <div
-                  className={`w-9 h-9 rounded-full border flex items-center justify-center shadow-inner transition-colors ${
+                  className={`w-11 h-11 rounded-full border flex items-center justify-center shadow-inner transition-colors ${
                     isExceeded
                       ? 'bg-rose-950/80 border-rose-700/60 text-rose-300'
                       : 'bg-[#11202b]/80 border-slate-700/50 text-slate-100'
                   }`}
                 >
-                  <Coffee className="w-4 h-4 stroke-[1.8]" />
+                  <Coffee className="w-5 h-5 stroke-[1.8]" />
                 </div>
               </div>
             </div>
           </div>
 
           {/* Metrics Column (Right): Expected Logout + 2x2 Grid */}
-          <div className="md:col-span-6 space-y-1.5">
+          <div className="md:col-span-7 space-y-2">
             {/* 0. Expected Logout Time Banner */}
-            <div className="bg-[#0b251c] border border-[#175c43] rounded-xl px-2.5 py-1.5 flex items-center justify-between shadow-inner transition-transform hover:scale-[1.01]">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-full bg-[#073826] text-[#00e599] flex items-center justify-center flex-shrink-0 border border-[#00e599]/40">
-                  <LogOut className="w-3 h-3 text-[#00e599]" />
+            <div className="bg-[#0b251c] border border-[#175c43] rounded-xl px-3.5 py-2 flex items-center justify-between shadow-inner transition-transform hover:scale-[1.01]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-7 h-7 rounded-full bg-[#073826] text-[#00e599] flex items-center justify-center flex-shrink-0 border border-[#00e599]/40">
+                  <LogOut className="w-3.5 h-3.5 text-[#00e599]" />
                 </div>
                 <div>
-                  <span className="text-[9px] text-emerald-300 font-medium block leading-none">
+                  <span className="text-[10px] text-emerald-300 font-medium block leading-none">
                     Expected Logout Time
                   </span>
-                  <span className="text-xs sm:text-sm font-extrabold text-[#00e599] tracking-tight block mt-0.5">
+                  <span className="text-sm sm:text-base font-extrabold text-[#00e599] tracking-tight block mt-0.5">
                     {result ? result.expectedLogoutTime : '06:00 PM'}
                   </span>
                 </div>
               </div>
               {result?.attendanceStatus === 'late_reporting' ? (
-                <span className="text-[9px] font-bold text-amber-300 bg-amber-950/80 border border-amber-700/80 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-700/80 px-2 py-0.5 rounded-full">
                   +{result.lateMinutes}m Late Reporting
                 </span>
               ) : result?.attendanceStatus === 'late_login' ? (
-                <span className="text-[9px] font-bold text-rose-300 bg-rose-950/80 border border-rose-700/80 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-rose-300 bg-rose-950/80 border border-rose-700/80 px-2 py-0.5 rounded-full">
                   +{result.lateMinutes}m Late Login
                 </span>
               ) : result?.lateMinutes && result.lateMinutes > 0 ? (
-                <span className="text-[9px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded-full">
-                  {result.lateMinutes}m Grace
+                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full">
+                  {result.lateMinutes}m Grace (On Schedule)
                 </span>
               ) : (
-                <span className="text-[9px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.5 rounded-full">
+                <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full">
                   On Schedule
                 </span>
               )}
             </div>
 
-            {/* 2x2 Metric Grid: Keeps Table Height Exactly Compact */}
-            <div className="grid grid-cols-2 gap-1.5">
+            {/* 2x2 Metric Grid: Keeps Table Height Clean & Spacious */}
+            <div className="grid grid-cols-2 gap-2">
               {/* 1. Worked Time */}
-              <div className="bg-[#101e29] border border-slate-700/60 rounded-xl p-2 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-medium">
-                  <Clock className="w-3 h-3 text-[#00e599]" />
+              <div className="bg-[#101e29] border border-slate-700/60 rounded-xl p-2.5 sm:p-3 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-medium">
+                  <Clock className="w-3.5 h-3.5 text-[#00e599]" />
                   <span>Worked Time</span>
                 </div>
-                <span className="text-[11px] sm:text-xs font-extrabold text-white tracking-tight mt-0.5 truncate">
+                <span className="text-xs sm:text-sm font-extrabold text-white tracking-tight mt-1 truncate">
                   {result ? result.workedHhMm : '00h 06m 00s'}
                 </span>
               </div>
 
               {/* 2. Remaining Work Hours */}
-              <div className="bg-[#0f1d26] border border-[#1b3a4d] rounded-xl p-2 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-medium">
-                  <Hourglass className="w-3 h-3 text-cyan-400" />
+              <div className="bg-[#0f1d26] border border-[#1b3a4d] rounded-xl p-2.5 sm:p-3 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-medium">
+                  <Hourglass className="w-3.5 h-3.5 text-cyan-400" />
                   <span>Remaining Work</span>
                 </div>
-                <span className="text-[11px] sm:text-xs font-extrabold text-cyan-300 tracking-tight mt-0.5 truncate">
+                <span className="text-xs sm:text-sm font-extrabold text-cyan-300 tracking-tight mt-1 truncate">
                   {result ? result.workLeftHhMm : '08h 24m 00s'}
                 </span>
               </div>
 
               {/* 3. Break Taken */}
-              <div className="bg-[#1b1712] border border-[#3e2c18] rounded-xl p-2 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-medium">
-                  <span className="w-2 h-2 rounded-full bg-[#ea580c]" />
+              <div className="bg-[#1b1712] border border-[#3e2c18] rounded-xl p-2.5 sm:p-3 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-medium">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#ea580c]" />
                   <span>Break Taken</span>
                 </div>
-                <span className="text-[11px] sm:text-xs font-extrabold text-[#f59e0b] tracking-tight mt-0.5 truncate">
+                <span className="text-xs sm:text-sm font-extrabold text-[#f59e0b] tracking-tight mt-1 truncate">
                   {result ? result.breakTakenDisplay : '10m 00s'}
                 </span>
               </div>
 
               {/* 4. Break Left */}
-              <div className="bg-[#0e1d29] border border-[#183a54] rounded-xl p-2 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
-                <div className="flex items-center gap-1.5 text-slate-400 text-[9px] font-medium">
-                  <span className="w-2 h-2 rounded-full bg-[#0284c7]" />
+              <div className="bg-[#0e1d29] border border-[#183a54] rounded-xl p-2.5 sm:p-3 shadow-inner transition-transform hover:scale-[1.01] flex flex-col justify-between">
+                <div className="flex items-center gap-1.5 text-slate-400 text-[10px] font-medium">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7]" />
                   <span>Break Left</span>
                 </div>
-                <span className="text-[11px] sm:text-xs font-extrabold text-[#38bdf8] tracking-tight mt-0.5 truncate">
+                <span className="text-xs sm:text-sm font-extrabold text-[#38bdf8] tracking-tight mt-1 truncate">
                   {result ? result.breakLeftDisplay : '50m 00s'}
                 </span>
               </div>
@@ -333,18 +336,15 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
             {/* 5. Over Break Taken (when exceeded) */}
             {isExceeded && (
-              <div className="bg-[#291215] border border-rose-800 rounded-xl px-2.5 py-1 flex items-center justify-between shadow-inner transition-transform hover:scale-[1.01] animate-smooth-in">
-                <div className="flex items-center gap-1.5">
-                  <AlertTriangle className="w-3 h-3 text-rose-400 flex-shrink-0" />
-                  <span className="text-[10px] text-rose-300 font-bold">
+              <div className="bg-[#291215] border border-rose-800 rounded-xl px-3 py-1.5 flex items-center justify-between shadow-inner transition-transform hover:scale-[1.01] animate-smooth-in">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-3.5 h-3.5 text-rose-400 flex-shrink-0" />
+                  <span className="text-xs text-rose-300 font-bold">
                     Over Break Taken
                   </span>
                 </div>
-                <span className="text-[11px] font-extrabold text-rose-400 tracking-tight">
-                  +{result?.excessBreakDisplay || `${excessMins}m 00s`}{' '}
-                  <span className="text-[9px] font-semibold text-rose-300/80">
-                    ({result?.excessBreakHhMm || '00h 00m 00s'})
-                  </span>
+                <span className="text-xs sm:text-sm font-extrabold text-rose-400 tracking-tight">
+                  +{result?.excessBreakDisplay || `${excessMins}m 00s`}
                 </span>
               </div>
             )}
@@ -352,13 +352,13 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
         </div>
 
         {/* Break Usage Progress Bar Section */}
-        <div className="pt-0.5">
-          <div className="flex items-end justify-between gap-3 mb-1">
+        <div className="pt-1">
+          <div className="flex items-end justify-between gap-3 mb-1.5">
             <div>
-              <h3 className="text-xs font-bold text-white leading-tight">
+              <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">
                 Total Break Allowance
               </h3>
-              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+              <p className="text-[11px] text-slate-400 font-medium mt-0.5">
                 {totalBreakAllowed === 30
                   ? `30 minutes ${result?.dayType === 'half_day' ? '(Half Day)' : ''}`
                   : '1 hour (60 minutes)'}
@@ -369,11 +369,11 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
               <span className="text-xs sm:text-sm font-extrabold text-white leading-tight mr-1">
                 {result ? result.breakTakenDisplay : '10m 00s'}
               </span>
-              <span className="text-[10px] text-slate-400 font-medium">
+              <span className="text-[11px] text-slate-400 font-medium">
                 of {totalBreakAllowed}m used
               </span>
               {isExceeded && (
-                <span className="block text-[10px] font-extrabold text-rose-400">
+                <span className="block text-[11px] font-extrabold text-rose-400">
                   (+{result?.excessBreakDisplay || `${excessMins}m 00s`} over!)
                 </span>
               )}
@@ -382,7 +382,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
           {/* Smooth Progress Bar */}
           <div
-            className="w-full bg-[#11202b] rounded-full h-2.5 sm:h-3 overflow-hidden relative border border-slate-700/50 shadow-inner"
+            className="w-full bg-[#11202b] rounded-full h-3 sm:h-3.5 overflow-hidden relative border border-slate-700/50 shadow-inner"
             role="progressbar"
             aria-valuenow={breakPercentage}
             aria-valuemin={0}
@@ -402,14 +402,23 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
 
       {/* Exceeded Break Alert or Lightbulb Tip Card at bottom */}
       {isExceeded ? (
-        <div className="bg-[#291712] border border-rose-900/80 rounded-xl p-2.5 flex items-center gap-2.5 shadow-2xs mt-auto text-rose-300 animate-smooth-in">
-          <div className="w-7 h-7 rounded-full bg-rose-950 text-rose-400 flex items-center justify-center flex-shrink-0 border border-rose-800">
+        <div
+          onClick={onOpenOverbreakModal}
+          className="bg-[#291712] hover:bg-[#381a20] border border-rose-900/80 hover:border-rose-600/80 rounded-xl p-2.5 flex items-center gap-2.5 shadow-2xs mt-auto text-rose-300 animate-smooth-in cursor-pointer transition-all active:scale-[0.99] group"
+          title="Click to view full Overbreak warning"
+        >
+          <div className="w-7 h-7 rounded-full bg-rose-950 text-rose-400 group-hover:text-rose-300 flex items-center justify-center flex-shrink-0 border border-rose-800 transition-colors">
             <AlertTriangle className="w-3.5 h-3.5" />
           </div>
-          <div>
-            <h4 className="text-xs font-bold text-rose-200 leading-tight">
-              Allowed Break Exceeded!
-            </h4>
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold text-rose-200 leading-tight">
+                Allowed Break Exceeded!
+              </h4>
+              <span className="text-[10px] text-rose-400/90 font-semibold group-hover:text-rose-300 transition-colors">
+                View Warning →
+              </span>
+            </div>
             <p className="text-[11px] text-rose-400/90 mt-0.5 leading-snug">
               Exceeded your{' '}
               {totalBreakAllowed === 30 ? '30m' : '1h'}{' '}
