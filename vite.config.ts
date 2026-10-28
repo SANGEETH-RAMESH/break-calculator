@@ -16,6 +16,7 @@ export default defineConfig({
         'logo.png',
         'logo1.png',
         'overbreak.png',
+        'overbreak2.png',
         'morning.png',
         'noon.png',
         'evening.png',

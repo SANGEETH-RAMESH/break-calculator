@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, AlertTriangle, Coffee, Clock, Timer, Hourglass, Play } from 'lucide-react';
 import type { CalculationResult } from '../types/shift';
 
@@ -13,6 +13,19 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
   onClose,
   result,
 }) => {
+  // Alternate between overbreak.png (finger up) and overbreak2.png (finger tilted) every 1 second
+  const [activeFrame, setActiveFrame] = useState<0 | 1>(0);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const interval = setInterval(() => {
+      setActiveFrame((prev) => (prev === 0 ? 1 : 0));
+    }, 400);
+
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
   // Close on Escape key
   useEffect(() => {
     if (!isOpen) return;
@@ -101,12 +114,25 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
           <div className="absolute left-1/4 top-3 w-2 h-2 rounded-full bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.8)] animate-ping" />
           <div className="absolute right-1/4 top-5 w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)] animate-ping" style={{ animationDelay: '0.7s' }} />
 
-          {/* Main Overbreak Character Image */}
-          <img
-            src="/overbreak.png"
-            alt="Thambi Thappu! Overbreak"
-            className="w-[280px] sm:w-[340px] max-w-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-transform duration-300 hover:scale-105"
-          />
+          {/* Main Overbreak Character Image (1-second alternating finger wag: overbreak.png <-> overbreak2.png) */}
+          <div className="relative w-[280px] sm:w-[340px] max-w-full flex items-center justify-center">
+            {/* Frame 1: Finger pointing straight up */}
+            <img
+              src="/overbreak.png"
+              alt="Thambi Thappu! Finger Up"
+              className={`w-full h-auto object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-opacity duration-150 pointer-events-auto hover:scale-105 ${
+                activeFrame === 0 ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+            {/* Frame 2: Finger pointing tilted (125% angle) */}
+            <img
+              src="/overbreak2.png"
+              alt="Thambi Thappu! Finger Tilted"
+              className={`absolute inset-0 w-full h-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-opacity duration-150 pointer-events-auto hover:scale-105 ${
+                activeFrame === 1 ? 'opacity-100' : 'opacity-0'
+              }`}
+            />
+          </div>
         </div>
 
         {/* Modal Card Content with Neon Red Border & Glow */}
@@ -117,7 +143,7 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
               <AlertTriangle className="w-4 h-4 text-[#ff1744]" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              Bro... break kazhinju <span className="inline-block animate-bounce">😭</span>
+              Bro... break kazhinju
             </h2>
           </div>
           <p className="text-xs sm:text-sm text-rose-200/80 font-medium mb-3.5">
