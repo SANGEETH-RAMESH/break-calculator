@@ -48,6 +48,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   errorMessage,
 }) => {
   const [isBtnClicked, setIsBtnClicked] = useState(false);
+  const [isCustomLoginOpen, setIsCustomLoginOpen] = useState(false);
 
   // Input refs for seamless auto-advance and backspace navigation
   const hoursInputRef = useRef<HTMLInputElement>(null);
@@ -305,70 +306,100 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
               </div>
             )}
 
-            {/* Custom Login Time Input (Only custom entering, no preset buttons) */}
+            {/* Custom Login Time Section (Collapsible - shown only when needed) */}
             {selectedShift && (
-              <div className="bg-[#0c1822] border border-slate-700/80 rounded-xl p-3 space-y-2 animate-smooth-in">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-white">
-                    <LogIn className="w-4 h-4 text-[#00e599]" />
-                    <span>Actual Login Time</span>
-                  </div>
-                  <span className="text-xs text-slate-400">
-                    Scheduled: <strong className="text-white">{scheduledStart12}</strong>
-                  </span>
-                </div>
-
-                {/* Direct Custom Time Input */}
-                <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3.5 py-2 shadow-inner focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
-                  <Timer className="w-4 h-4 text-[#00e599] mr-2 flex-shrink-0" />
-                  <input
-                    id="custom-login-input"
-                    type="text"
-                    value={customLoginTime}
-                    onChange={(e) => onChangeCustomLoginTime(e.target.value)}
-                    placeholder={`e.g. ${scheduledStart12} or 1:03 PM`}
-                    className="w-full bg-transparent text-xs sm:text-sm font-bold text-white placeholder-slate-500 focus:outline-none font-mono"
-                    autoComplete="off"
-                  />
-                  {customLoginTime && (
+              isCustomLoginOpen || Boolean(customLoginTime.trim()) ? (
+                <div className="bg-[#0c1822] border border-slate-700/80 rounded-xl p-3 space-y-2 animate-smooth-in">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs sm:text-sm font-bold text-white">
+                      <LogIn className="w-4 h-4 text-[#00e599]" />
+                      <span>Actual Login Time</span>
+                    </div>
                     <button
                       type="button"
-                      onClick={() => onChangeCustomLoginTime('')}
-                      className="text-slate-400 hover:text-white text-xs p-1 rounded-lg hover:bg-slate-800 cursor-pointer ml-1.5 flex-shrink-0"
-                      title="Clear custom login (revert to scheduled)"
+                      onClick={() => {
+                        onChangeCustomLoginTime('');
+                        setIsCustomLoginOpen(false);
+                      }}
+                      className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer hover:underline"
+                      title="Hide custom login and use scheduled time"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <X className="w-3 h-3" />
+                      <span>Use Scheduled</span>
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                {/* Real-time Dynamic Status Pill */}
-                <div className="bg-[#11202b]/90 border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 text-slate-300">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span>Login: <strong className="text-white">{actualLogin12}</strong></span>
-                    {attendanceStatus === 'on_time' ? (
-                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full">
-                        {lateMinutesDiff > 0 ? `On Time (${lateMinutesDiff}m Grace)` : 'On Time'}
-                      </span>
-                    ) : attendanceStatus === 'late_reporting' ? (
-                      <span className="text-[10px] font-bold text-amber-300 bg-amber-950/90 border border-amber-700 px-2 py-0.5 rounded-full">
-                        Late Reporting (+{lateMinutesDiff}m)
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 border border-rose-800 px-2 py-0.5 rounded-full">
-                        Late Login (+{lateMinutesDiff}m)
-                      </span>
+                  {/* Direct Custom Time Input */}
+                  <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3.5 py-2 shadow-inner focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
+                    <Timer className="w-4 h-4 text-[#00e599] mr-2 flex-shrink-0" />
+                    <input
+                      id="custom-login-input"
+                      type="text"
+                      value={customLoginTime}
+                      onChange={(e) => onChangeCustomLoginTime(e.target.value)}
+                      placeholder={`e.g. ${scheduledStart12} or 1:03 PM`}
+                      className="w-full bg-transparent text-xs sm:text-sm font-bold text-white placeholder-slate-500 focus:outline-none font-mono"
+                      autoComplete="off"
+                    />
+                    {customLoginTime && (
+                      <button
+                        type="button"
+                        onClick={() => onChangeCustomLoginTime('')}
+                        className="text-slate-400 hover:text-white text-xs p-1 rounded-lg hover:bg-slate-800 cursor-pointer ml-1.5 flex-shrink-0"
+                        title="Clear custom login"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     )}
                   </div>
 
-                  <div>
-                    Logout:{' '}
-                    <strong className="text-[#00e599] font-extrabold text-xs sm:text-sm">
-                      {expectedLogout12}
-                    </strong>
+                  {/* Real-time Dynamic Status Pill */}
+                  <div className="bg-[#11202b]/90 border border-slate-700/60 rounded-lg px-3 py-1.5 text-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 text-slate-300">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span>Login: <strong className="text-white">{actualLogin12}</strong></span>
+                      {attendanceStatus === 'on_time' ? (
+                        <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-2 py-0.5 rounded-full">
+                          {lateMinutesDiff > 0 ? `On Time (${lateMinutesDiff}m Grace)` : 'On Time'}
+                        </span>
+                      ) : attendanceStatus === 'late_reporting' ? (
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950/90 border border-amber-700 px-2 py-0.5 rounded-full">
+                          Late Reporting (+{lateMinutesDiff}m)
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 border border-rose-800 px-2 py-0.5 rounded-full">
+                          Late Login (+{lateMinutesDiff}m)
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      Logout:{' '}
+                      <strong className="text-[#00e599] font-extrabold text-xs sm:text-sm">
+                        {expectedLogout12}
+                      </strong>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-between bg-[#0c1822]/90 border border-slate-700/60 rounded-xl px-3 py-2 text-xs text-slate-300 animate-smooth-in">
+                  <div className="flex items-center gap-2">
+                    <LogIn className="w-3.5 h-3.5 text-[#00e599]" />
+                    <span>Login: <strong className="text-white">{scheduledStart12}</strong></span>
+                    <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/70 border border-emerald-800/80 px-1.5 py-0.5 rounded-full">
+                      Scheduled
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomLoginOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-[#00e599] hover:text-white bg-[#00e599]/10 hover:bg-[#00e599]/25 px-2.5 py-1 rounded-lg border border-[#00e599]/40 transition-all cursor-pointer active:scale-95"
+                    title="Change login time if you logged in at a different time"
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>Different Login Time?</span>
+                  </button>
+                </div>
+              )
             )}
 
             {/* Shift Rules Info Badge */}
