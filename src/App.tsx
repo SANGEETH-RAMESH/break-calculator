@@ -328,10 +328,12 @@ export const App: React.FC = () => {
 
       {/* Main Content Area */}
       <div
-        className={`relative z-20 w-full transition-all duration-500 ease-out ${
+        className={`relative z-20 w-full transition-all duration-600 ease-[cubic-bezier(0.16,1,0.3,1)] ${
           mainView === 'reminder'
             ? 'max-w-[480px]'
-            : 'max-w-[460px] lg:max-w-6xl xl:max-w-7xl'
+            : isCalculated
+            ? 'max-w-6xl xl:max-w-7xl'
+            : 'max-w-[460px]'
         }`}
       >
         {/* Top Header Bar */}
@@ -361,15 +363,11 @@ export const App: React.FC = () => {
         ) : (
           <>
             {/* ============================================================== */}
-            {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Split Animation)    */}
+            {/* DESKTOP LAYOUT (lg:flex): Card 1 + Card 2 (Exact Same Height) */}
             {/* ============================================================== */}
-            <div className="hidden lg:grid grid-cols-12 gap-6 items-stretch w-full relative">
-              {/* Card 1: Calculator Form (slides smoothly from screen center to left column) */}
-              <div
-                className={`col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 desktop-card1-transition z-20 ${
-                  isCalculated ? 'desktop-card1-left' : 'desktop-card1-center'
-                }`}
-              >
+            <div className="hidden lg:flex items-stretch gap-6 w-full">
+              {/* Card 1: Calculator Form (Stable 460px width, glides smoothly from center to left) */}
+              <div className="w-[460px] xl:w-[470px] flex-shrink-0 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 z-20 transition-all duration-300">
                 <CalculatorForm
                   selectedShiftId={selectedShiftId}
                   onSelectShift={handleSelectShift}
@@ -408,9 +406,9 @@ export const App: React.FC = () => {
                 />
               </div>
 
-              {/* Card 2: Status Results (emerges smoothly from screen center to right column) */}
+              {/* Card 2: Status Results (emerges smoothly from center to right) */}
               {isCalculated && (
-                <div className="col-span-7 flex flex-col h-full min-h-0 animate-desktop-card2-in z-10">
+                <div className="flex-1 min-w-0 flex flex-col h-full min-h-0 animate-desktop-card2-in z-10">
                   <ResultsDisplay
                     result={result}
                     animationKey={animationKey}

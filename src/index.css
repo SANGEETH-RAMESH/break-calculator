@@ -89,27 +89,13 @@
 /* Desktop Split & Slide Animations (Center -> Left & Center -> Right) */
 /* ============================================================== */
 
-/* Card 1: Calculator Form smoothly glides from screen center to left column */
-.desktop-card1-center {
-  transform: translateX(calc(70% + 17px));
-}
-
-.desktop-card1-left {
-  transform: translateX(0);
-}
-
-.desktop-card1-transition {
-  transition: transform 650ms cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform;
-}
-
 /* Card 2: Results Display emerges from screen center and glides to right column */
 @keyframes desktopCard2FromCenter {
   0% {
     opacity: 0;
-    transform: translateX(calc(-36% - 12px)) scale(0.96);
+    transform: translateX(-60px) scale(0.97);
   }
-  40% {
+  50% {
     opacity: 0.85;
   }
   100% {
@@ -119,13 +105,13 @@
 }
 
 .animate-desktop-card2-in {
-  animation: desktopCard2FromCenter 650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: desktopCard2FromCenter 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
 /* Fallback alias */
 .animate-desktop-reveal {
-  animation: desktopCard2FromCenter 650ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: desktopCard2FromCenter 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
