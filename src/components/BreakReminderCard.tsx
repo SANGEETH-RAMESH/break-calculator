@@ -8,7 +8,11 @@ import {
   StopCircle,
   ArrowLeft,
 } from 'lucide-react';
-import { requestNotificationPermission, playBreakAlertSound } from '../utils/reminderSound';
+import {
+  requestNotificationPermission,
+  playBreakAlertSound,
+  subscribeAndSchedulePush,
+} from '../utils/reminderSound';
 
 export interface BreakReminderState {
   enabled: boolean;
@@ -70,6 +74,9 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
       const granted = await requestNotificationPermission();
       if (!granted && !soundEnabled) {
         setPermissionNotice('Please allow notifications or enable sound alert.');
+      } else if (granted) {
+        // Schedule server-side Web Push for true background delivery on iPhone & mobile!
+        subscribeAndSchedulePush(Math.max(1, duration), unit);
       }
     }
 

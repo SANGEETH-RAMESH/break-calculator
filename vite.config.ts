@@ -24,6 +24,7 @@ export default defineConfig({
         'mobile_noon.png',
         'mobile_evening.png',
         'mobile_night.png',
+        'push-listener.js',
       ],
       manifest: {
         name: 'Break Calculator',
@@ -59,6 +60,7 @@ export default defineConfig({
       workbox: {
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,webp}'],
+        importScripts: ['/push-listener.js'],
       },
     }),
   ],
