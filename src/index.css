@@ -130,4 +130,42 @@
   animation: mobileSlideRight 350ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+/* Dynamic Time Period Backgrounds (Mobile default, Desktop on lg:) */
+.bg-period-morning {
+  background-image: url('/mobile_morning.png');
+}
+@media (min-width: 1024px) {
+  .bg-period-morning {
+    background-image: url('/morning.png');
+  }
+}
+
+.bg-period-noon {
+  background-image: url('/mobile_noon.png');
+}
+@media (min-width: 1024px) {
+  .bg-period-noon {
+    background-image: url('/noon.png');
+  }
+}
+
+.bg-period-evening {
+  background-image: url('/mobile_evening.png');
+}
+@media (min-width: 1024px) {
+  .bg-period-evening {
+    background-image: url('/evening.png');
+  }
+}
+
+.bg-period-night {
+  background-image: url('/mobile_night.png');
+}
+@media (min-width: 1024px) {
+  .bg-period-night {
+    background-image: url('/night.png');
+  }
+}
+
+
 

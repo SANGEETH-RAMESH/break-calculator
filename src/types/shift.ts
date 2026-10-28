@@ -4,6 +4,9 @@ export interface Shift {
   startTime: string; // HH:MM 24-hour format (e.g. "13:00")
   endTime: string;   // HH:MM 24-hour format (e.g. "22:30")
   isGBJ: boolean;
+  allowedBreakMinutes?: number;
+  requiredWorkingMinutes?: number;
+  shiftDurationMinutes?: number;
 }
 
 export interface ShiftRule {
@@ -16,6 +19,7 @@ export type TimeCalculationMode = 'current_time' | 'logout_time';
 export type InputMode = 'break_taken' | 'worked_time';
 export type DayType = 'full_day' | 'half_day';
 export type ShiftHalf = 'first_half' | 'second_half';
+export type AttendanceStatus = 'on_time' | 'late_reporting' | 'late_login';
 
 export interface CalculationResult {
   breakTakenMinutes: number;
@@ -51,6 +55,18 @@ export interface CalculationResult {
   effectiveStartTime?: string;
   effectiveEndTime?: string;
   effectiveShiftLabel?: string;
+  actualLoginTime?: string;
+  actualLoginTimeFormatted?: string;
+  expectedLogoutTime?: string;
+  lateMinutes?: number;
+  attendanceStatus?: AttendanceStatus;
+  attendanceStatusLabel?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  breakTakenTotalSeconds?: number;
+  breakLeftTotalSeconds?: number;
+  workedTotalSeconds?: number;
+  workLeftTotalSeconds?: number;
 }
 
 export interface ParseResult {

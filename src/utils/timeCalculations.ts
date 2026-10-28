@@ -1,5 +1,5 @@
-import type { Shift, CalculationResult, ParseResult, TimeCalculationMode, DayType, ShiftHalf } from '../types/shift';
-import { REGULAR_SHIFT_RULES, GBJ_SHIFT_RULES, HALF_DAY_RULES } from '../constants/shifts';
+import type { Shift, CalculationResult, ParseResult, TimeCalculationMode, DayType, ShiftHalf, AttendanceStatus } from '../types/shift';
+import { getShiftRules } from '../constants/shifts';
 
 /**
  * Format total integer minutes into HH:MM duration string (e.g. 48 -> "00:48", 90 -> "01:30").
@@ -12,13 +12,14 @@ export function formatMinutesToHHMM(totalMinutes: number): string {
 }
 
 /**
- * Format integer minutes into "XXh YYm" format (e.g. 48 -> "00h 48m", 12 -> "00h 12m", 507 -> "08h 27m").
+ * Format minutes (including fractional seconds) into "XXh YYm ZZs" format.
  */
 export function formatMinutesToHhMm(totalMinutes: number): string {
-  const safeMinutes = Math.max(0, Math.floor(totalMinutes));
-  const hours = Math.floor(safeMinutes / 60);
-  const minutes = safeMinutes % 60;
-  return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m`;
+  const totalSeconds = Math.max(0, Math.round(totalMinutes * 60));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${String(hours).padStart(2, '0')}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 /**
@@ -46,17 +47,17 @@ export function addMinutesToClock24(clock24: string, minutesToAdd: number): stri
 
 /**
  * Returns the effective start time, end time, and label for half-day shifts.
- * Half day rule: 5 hours total (4h 30m work required + 30m break).
- * - First Half: starts at shift.startTime and runs for 5 hours (300 mins).
- * - Second Half: ends at shift.endTime and starts 5 hours (300 mins) prior to shift.endTime.
+ * - Regular shifts: 5 hours total (4h 30m work required + 30m break).
+ * - Great Break Job (GBJ): 4 hours total (3h 30m work required + 30m break).
  */
 export function getHalfDayShiftTimes(
   shift: Shift,
   half: ShiftHalf
 ): { startTime: string; endTime: string; label: string } {
+  const duration = shift.isGBJ ? 240 : 300;
   if (half === 'first_half') {
     const startTime = shift.startTime;
-    const endTime = addMinutesToClock24(shift.startTime, 300);
+    const endTime = addMinutesToClock24(shift.startTime, duration);
     const [sH, sM] = startTime.split(':').map(Number);
     const [eH, eM] = endTime.split(':').map(Number);
     const start12 = formatMinutesToClockTime12h(sH * 60 + sM);
@@ -68,7 +69,7 @@ export function getHalfDayShiftTimes(
     };
   } else {
     const endTime = shift.endTime;
-    const startTime = addMinutesToClock24(shift.endTime, -300);
+    const startTime = addMinutesToClock24(shift.endTime, -duration);
     const [sH, sM] = startTime.split(':').map(Number);
     const [eH, eM] = endTime.split(':').map(Number);
     const start12 = formatMinutesToClockTime12h(sH * 60 + sM);
@@ -175,8 +176,14 @@ export function getCurrentClockTime24(): string {
 }
 
 export function formatMinutesToBadge(totalMinutes: number): string {
-  const safe = Math.max(0, Math.floor(totalMinutes));
-  return `${safe} mins`;
+  const totalSeconds = Math.max(0, Math.round(totalMinutes * 60));
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  if (hours > 0) {
+    return `${hours}h ${String(minutes).padStart(2, '0')}m ${String(seconds).padStart(2, '0')}s`;
+  }
+  return `${minutes}m ${String(seconds).padStart(2, '0')}s`;
 }
 
 /**
@@ -196,9 +203,7 @@ export function calculateBreakFromBreakTaken(
 ): CalculationResult {
   const clock24 = refClock24 || getCurrentClockTime24();
   const isHalfDay = dayType === 'half_day';
-  const rules = isHalfDay
-    ? HALF_DAY_RULES
-    : (shift.isGBJ ? GBJ_SHIFT_RULES : REGULAR_SHIFT_RULES);
+  const rules = getShiftRules(shift, dayType);
 
   const halfTimes = isHalfDay ? getHalfDayShiftTimes(shift, shiftHalf) : null;
   const effectiveStartTime = halfTimes ? halfTimes.startTime : shift.startTime;
@@ -261,10 +266,24 @@ export function calculateBreakFromBreakTaken(
 }
 
 /**
+ * Converts a duration or time string into a 24-hour "HH:MM" string.
+ * Supports "1:10 PM", "13:10", "1:10", "01:10", etc.
+ */
+export function parseTimeTo24h(timeStr: string): string | null {
+  const parsed = parseTimeToMinutes(timeStr);
+  if (!parsed.isValid || parsed.minutes === undefined) return null;
+  const total = Math.round(parsed.minutes);
+  const h = Math.floor(total / 60) % 24;
+  const m = total % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/**
  * Real-Time Shift Break Calculation (Worked Time Mode):
- * Elapsed Time = (Current Clock Time or Logout Time) - Shift Start Time
+ * Elapsed Time = (Current Clock Time) - Actual Login Time
  * Break Taken = Elapsed Time - Worked Time
- * Break Left = Allowed Break (60m or 30m) - Break Taken
+ * Break Left = Allowed Break (30m or 60m) - Break Taken
+ * Expected Logout = Actual Login Time + Shift Duration
  * Over Break = Break Taken - Allowed Break (if Break Taken > Allowed Break)
  */
 export function calculateLiveShiftBreak(
@@ -274,63 +293,155 @@ export function calculateLiveShiftBreak(
   mode: TimeCalculationMode = 'current_time',
   rawSeconds: number = 0,
   dayType: DayType = 'full_day',
-  shiftHalf: ShiftHalf = 'first_half'
+  shiftHalf: ShiftHalf = 'first_half',
+  customLoginTime?: string
 ): CalculationResult {
   const clock24 = refClock24 || getCurrentClockTime24();
   const isHalfDay = dayType === 'half_day';
-  const rules = isHalfDay
-    ? HALF_DAY_RULES
-    : (shift.isGBJ ? GBJ_SHIFT_RULES : REGULAR_SHIFT_RULES);
+  const rules = getShiftRules(shift, dayType);
 
   const halfTimes = isHalfDay ? getHalfDayShiftTimes(shift, shiftHalf) : null;
   const effectiveStartTime = halfTimes ? halfTimes.startTime : shift.startTime;
   const effectiveEndTime = halfTimes ? halfTimes.endTime : shift.endTime;
   const effectiveShiftLabel = halfTimes ? halfTimes.label : shift.label;
 
-  const totalAllowedBreak = rules.allowedBreakMinutes; // 60 mins (Full Day) or 30 mins (Half Day)
-  const requiredWorkingMinutes = rules.requiredWorkingMinutes; // 510 or 360 (Full Day) or 270 (Half Day)
-
-  const elapsedMinutes = calculateElapsedMinutesBetween(effectiveStartTime, clock24);
-
-  // In custom logout mode or during live shift where elapsed >= worked
-  let breakTaken: number;
-  if (mode === 'logout_time' || elapsedMinutes >= workedMinutes) {
-    breakTaken = Math.max(0, elapsedMinutes - workedMinutes);
-  } else {
-    // When workedMinutes > elapsedMinutes (e.g. testing full shift duration ahead of current clock)
-    breakTaken = Math.max(0, workedMinutes - requiredWorkingMinutes);
+  // Custom / Late Login Handling
+  let actualStartTime = effectiveStartTime;
+  let lateMinutes = 0;
+  if (customLoginTime && customLoginTime.trim()) {
+    const parsedCustom = parseTimeTo24h(customLoginTime.trim());
+    if (parsedCustom) {
+      actualStartTime = parsedCustom;
+      const diff = calculateElapsedMinutesBetween(effectiveStartTime, actualStartTime);
+      if (diff > 0 && diff < 720) {
+        lateMinutes = diff;
+      }
+    }
   }
 
-  const breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
-  const excessBreak = Math.max(0, breakTaken - totalAllowedBreak);
-  const workLeftMinutes = Math.max(0, requiredWorkingMinutes - workedMinutes);
+  // Attendance classification:
+  // - 0 to 2 minutes: On Time (Grace period, logout at scheduled shift end)
+  // - 3 to 15 minutes: Late Reporting (work extra minutes, logout = scheduledEnd + lateMinutes)
+  // - > 15 minutes: Late Login (considered late login, logout = actualLogin + shiftDuration)
+  let attendanceStatus: AttendanceStatus = 'on_time';
+  let attendanceStatusLabel = 'On Time';
 
-  const percentageUsed = totalAllowedBreak > 0
-    ? Math.min(100, Math.max(0, Math.round((Math.min(breakTaken, totalAllowedBreak) / totalAllowedBreak) * 100)))
+  if (lateMinutes > 15) {
+    attendanceStatus = 'late_login';
+    attendanceStatusLabel = 'Late Login';
+  } else if (lateMinutes >= 3) {
+    attendanceStatus = 'late_reporting';
+    attendanceStatusLabel = 'Late Reporting';
+  } else if (lateMinutes > 0) {
+    attendanceStatus = 'on_time';
+    attendanceStatusLabel = 'On Time (Grace Period)';
+  } else {
+    attendanceStatus = 'on_time';
+    attendanceStatusLabel = 'On Time';
+  }
+
+  const [aH, aM] = actualStartTime.split(':').map(Number);
+  const actualLoginTimeFormatted = formatMinutesToClockTime12h(aH * 60 + aM);
+
+  // If late <= 2 min: logout time is scheduled end time (no extra work needed).
+  // If late 3-15 min (late reporting): logout is shifted by late minutes (e.g. 1:03 PM -> 10:33 PM).
+  // If late > 15 min (late login): logout is actualLogin + shiftDuration.
+  const expectedLogout24 = (attendanceStatus === 'on_time')
+    ? effectiveEndTime
+    : addMinutesToClock24(actualStartTime, rules.shiftDurationMinutes);
+
+  const [eH, eM] = expectedLogout24.split(':').map(Number);
+  const expectedLogoutTime = formatMinutesToClockTime12h(eH * 60 + eM);
+
+  const [sH, sM] = effectiveStartTime.split(':').map(Number);
+  const scheduledStartTimeFormatted = formatMinutesToClockTime12h(sH * 60 + sM);
+  const [seH, seM] = effectiveEndTime.split(':').map(Number);
+  const scheduledEndTimeFormatted = formatMinutesToClockTime12h(seH * 60 + seM);
+
+  const totalAllowedBreak = rules.allowedBreakMinutes; // 30 mins or 60 mins
+  const requiredWorkingMinutes = rules.requiredWorkingMinutes; // 510, 390 (GBJ), 270, or 210 (GBJ Half Day)
+
+  // Exact second precision calculations
+  const totalAllowedBreakSeconds = totalAllowedBreak * 60;
+  const requiredWorkingSeconds = requiredWorkingMinutes * 60;
+  const workedTotalSeconds = Math.max(0, Math.round(workedMinutes * 60));
+
+  // Elapsed minutes from actual login time to current clock
+  const elapsedMinutes = calculateElapsedMinutesBetween(actualStartTime, clock24);
+  const elapsedTotalSeconds = elapsedMinutes * 60;
+
+  let breakTakenTotalSeconds: number;
+  if (elapsedTotalSeconds >= workedTotalSeconds) {
+    breakTakenTotalSeconds = Math.max(0, elapsedTotalSeconds - workedTotalSeconds);
+  } else {
+    // When workedTotalSeconds > elapsedTotalSeconds (e.g. testing full shift duration ahead of current clock)
+    breakTakenTotalSeconds = Math.max(0, workedTotalSeconds - requiredWorkingSeconds);
+  }
+
+  const breakLeftTotalSeconds = Math.max(0, totalAllowedBreakSeconds - breakTakenTotalSeconds);
+  const excessBreakTotalSeconds = Math.max(0, breakTakenTotalSeconds - totalAllowedBreakSeconds);
+  const workLeftTotalSeconds = Math.max(0, requiredWorkingSeconds - workedTotalSeconds);
+
+  const breakTakenMinutes = breakTakenTotalSeconds / 60;
+  const breakLeftMinutes = breakLeftTotalSeconds / 60;
+  const excessBreakMinutes = excessBreakTotalSeconds / 60;
+  const workLeftMinutes = workLeftTotalSeconds / 60;
+
+  const percentageUsed = totalAllowedBreakSeconds > 0
+    ? Math.min(100, Math.max(0, Math.round((Math.min(breakTakenTotalSeconds, totalAllowedBreakSeconds) / totalAllowedBreakSeconds) * 100)))
     : 0;
 
   const [refH, refM] = clock24.split(':').map(Number);
   const clock12h = formatMinutesToClockTime12h(refH * 60 + refM);
 
-  const workedHours = Math.floor(workedMinutes / 60);
-  const workedMins = Math.floor(workedMinutes % 60);
-  const workedHhMm = rawSeconds > 0
-    ? `${String(workedHours).padStart(2, '0')}h ${String(workedMins).padStart(2, '0')}m ${String(rawSeconds).padStart(2, '0')}s`
-    : `${String(workedHours).padStart(2, '0')}h ${String(workedMins).padStart(2, '0')}m`;
+  const workedHours = Math.floor(workedTotalSeconds / 3600);
+  const workedMins = Math.floor((workedTotalSeconds % 3600) / 60);
+  const workedSecs = workedTotalSeconds % 60;
+  const workedHhMm = `${String(workedHours).padStart(2, '0')}h ${String(workedMins).padStart(2, '0')}m ${String(workedSecs).padStart(2, '0')}s`;
 
-  const workLeftHours = Math.floor(workLeftMinutes / 60);
-  const workLeftMins = Math.floor(workLeftMinutes % 60);
-  const workLeftHhMm = `${String(workLeftHours).padStart(2, '0')}h ${String(workLeftMins).padStart(2, '0')}m`;
+  const workLeftHours = Math.floor(workLeftTotalSeconds / 3600);
+  const workLeftMins = Math.floor((workLeftTotalSeconds % 3600) / 60);
+  const workLeftSecs = workLeftTotalSeconds % 60;
+  const workLeftHhMm = `${String(workLeftHours).padStart(2, '0')}h ${String(workLeftMins).padStart(2, '0')}m ${String(workLeftSecs).padStart(2, '0')}s`;
+
+  const breakTakenHours = Math.floor(breakTakenTotalSeconds / 3600);
+  const breakTakenMins = Math.floor((breakTakenTotalSeconds % 3600) / 60);
+  const breakTakenSecs = breakTakenTotalSeconds % 60;
+  const breakTakenDisplay = breakTakenHours > 0
+    ? `${breakTakenHours}h ${String(breakTakenMins).padStart(2, '0')}m ${String(breakTakenSecs).padStart(2, '0')}s`
+    : `${breakTakenMins}m ${String(breakTakenSecs).padStart(2, '0')}s`;
+  const breakTakenHhMm = `${String(breakTakenHours).padStart(2, '0')}h ${String(breakTakenMins).padStart(2, '0')}m ${String(breakTakenSecs).padStart(2, '0')}s`;
+
+  const breakLeftHours = Math.floor(breakLeftTotalSeconds / 3600);
+  const breakLeftMins = Math.floor((breakLeftTotalSeconds % 3600) / 60);
+  const breakLeftSecs = breakLeftTotalSeconds % 60;
+  const breakLeftDisplay = breakLeftHours > 0
+    ? `${breakLeftHours}h ${String(breakLeftMins).padStart(2, '0')}m ${String(breakLeftSecs).padStart(2, '0')}s`
+    : `${breakLeftMins}m ${String(breakLeftSecs).padStart(2, '0')}s`;
+  const breakLeftHhMm = `${String(breakLeftHours).padStart(2, '0')}h ${String(breakLeftMins).padStart(2, '0')}m ${String(breakLeftSecs).padStart(2, '0')}s`;
+
+  const elapsedHours = Math.floor(elapsedTotalSeconds / 3600);
+  const elapsedMins = Math.floor((elapsedTotalSeconds % 3600) / 60);
+  const elapsedSecs = elapsedTotalSeconds % 60;
+  const elapsedHhMm = `${String(elapsedHours).padStart(2, '0')}h ${String(elapsedMins).padStart(2, '0')}m ${String(elapsedSecs).padStart(2, '0')}s`;
+
+  const excessHours = Math.floor(excessBreakTotalSeconds / 3600);
+  const excessMins = Math.floor((excessBreakTotalSeconds % 3600) / 60);
+  const excessSecs = excessBreakTotalSeconds % 60;
+  const excessBreakDisplay = excessHours > 0
+    ? `${excessHours}h ${String(excessMins).padStart(2, '0')}m ${String(excessSecs).padStart(2, '0')}s`
+    : `${excessMins}m ${String(excessSecs).padStart(2, '0')}s`;
+  const excessBreakHhMm = `${String(excessHours).padStart(2, '0')}h ${String(excessMins).padStart(2, '0')}m ${String(excessSecs).padStart(2, '0')}s`;
 
   return {
-    breakTakenMinutes: breakTaken,
-    breakLeftMinutes: breakLeft,
-    breakTakenFormatted: formatMinutesToHHMM(breakTaken),
-    breakLeftFormatted: formatMinutesToHHMM(breakLeft),
-    breakTakenHhMm: formatMinutesToHhMm(breakTaken),
-    breakLeftHhMm: formatMinutesToHhMm(breakLeft),
-    breakTakenDisplay: formatMinutesToBadge(breakTaken),
-    breakLeftDisplay: formatMinutesToBadge(breakLeft),
+    breakTakenMinutes,
+    breakLeftMinutes,
+    breakTakenFormatted: formatMinutesToHHMM(breakTakenMinutes),
+    breakLeftFormatted: formatMinutesToHHMM(breakLeftMinutes),
+    breakTakenHhMm,
+    breakLeftHhMm,
+    breakTakenDisplay,
+    breakLeftDisplay,
     workedHhMm,
     totalAllowedHhMm: formatMinutesToHhMm(totalAllowedBreak),
     totalAllowedBreakMinutes: totalAllowedBreak,
@@ -341,13 +452,13 @@ export function calculateLiveShiftBreak(
     workedTimeFormatted: formatMinutesToHHMM(workedMinutes),
     elapsedMinutes,
     elapsedFormatted: formatMinutesToHHMM(elapsedMinutes),
-    elapsedHhMm: formatMinutesToHhMm(elapsedMinutes),
+    elapsedHhMm,
     workLeftMinutes,
     workLeftHhMm,
     currentTimeFormatted: clock12h,
-    excessBreakMinutes: excessBreak,
-    excessBreakHhMm: formatMinutesToHhMm(excessBreak),
-    excessBreakDisplay: formatMinutesToBadge(excessBreak),
+    excessBreakMinutes,
+    excessBreakHhMm,
+    excessBreakDisplay,
     calculationMode: mode,
     inputMode: 'worked_time',
     workedSeconds: rawSeconds,
@@ -356,6 +467,18 @@ export function calculateLiveShiftBreak(
     effectiveStartTime,
     effectiveEndTime,
     effectiveShiftLabel,
+    actualLoginTime: actualStartTime,
+    actualLoginTimeFormatted,
+    expectedLogoutTime,
+    lateMinutes,
+    attendanceStatus,
+    attendanceStatusLabel,
+    scheduledStartTime: scheduledStartTimeFormatted,
+    scheduledEndTime: scheduledEndTimeFormatted,
+    breakTakenTotalSeconds,
+    breakLeftTotalSeconds,
+    workedTotalSeconds,
+    workLeftTotalSeconds,
   };
 }
 
@@ -370,9 +493,7 @@ export function validateWorkedMinutesForShift(
   if (workedMinutes < 0) {
     return { isValid: false, error: 'Worked time cannot be negative.' };
   }
-  const rules = dayType === 'half_day'
-    ? HALF_DAY_RULES
-    : (shift.isGBJ ? GBJ_SHIFT_RULES : REGULAR_SHIFT_RULES);
+  const rules = getShiftRules(shift, dayType);
   if (workedMinutes > rules.shiftDurationMinutes) {
     return {
       isValid: false,
@@ -392,9 +513,7 @@ export function calculateBreak(
   shiftHalf: ShiftHalf = 'first_half'
 ): CalculationResult {
   const isHalfDay = dayType === 'half_day';
-  const rules = isHalfDay
-    ? HALF_DAY_RULES
-    : (shift.isGBJ ? GBJ_SHIFT_RULES : REGULAR_SHIFT_RULES);
+  const rules = getShiftRules(shift, dayType);
 
   const halfTimes = isHalfDay ? getHalfDayShiftTimes(shift, shiftHalf) : null;
   const effectiveStartTime = halfTimes ? halfTimes.startTime : shift.startTime;

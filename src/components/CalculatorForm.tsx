@@ -1,8 +1,14 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee, Sun, Sunset } from 'lucide-react';
-import { SHIFT_OPTIONS } from '../constants/shifts';
-import type { TimeCalculationMode, DayType, ShiftHalf } from '../types/shift';
-import { getCurrentClockTime24, formatMinutesToClockTime12h, getHalfDayShiftTimes } from '../utils/timeCalculations';
+import React, { useRef, useState } from 'react';
+import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee, Sun, Sunset, LogIn, Timer } from 'lucide-react';
+import { SHIFT_OPTIONS, getShiftRules } from '../constants/shifts';
+import type { DayType, ShiftHalf } from '../types/shift';
+import {
+  formatMinutesToClockTime12h,
+  getHalfDayShiftTimes,
+  addMinutesToClock24,
+  parseTimeTo24h,
+  calculateElapsedMinutesBetween,
+} from '../utils/timeCalculations';
 
 interface CalculatorFormProps {
   selectedShiftId: string;
@@ -11,16 +17,14 @@ interface CalculatorFormProps {
   onChangeDayType: (val: DayType) => void;
   shiftHalf: ShiftHalf;
   onChangeShiftHalf: (val: ShiftHalf) => void;
+  customLoginTime: string;
+  onChangeCustomLoginTime: (val: string) => void;
   workedHours: string;
   onChangeWorkedHours: (val: string) => void;
   workedMinutes: string;
   onChangeWorkedMinutes: (val: string) => void;
   workedSeconds: string;
   onChangeWorkedSeconds: (val: string) => void;
-  calculationMode: TimeCalculationMode;
-  onChangeCalculationMode: (mode: TimeCalculationMode) => void;
-  customLogoutTime: string;
-  onChangeCustomLogoutTime: (value: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   errorMessage: string | null;
 }
@@ -32,20 +36,17 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   onChangeDayType,
   shiftHalf,
   onChangeShiftHalf,
+  customLoginTime,
+  onChangeCustomLoginTime,
   workedHours,
   onChangeWorkedHours,
   workedMinutes,
   onChangeWorkedMinutes,
   workedSeconds,
   onChangeWorkedSeconds,
-  calculationMode,
-  onChangeCalculationMode,
-  customLogoutTime,
-  onChangeCustomLogoutTime,
   onSubmit,
   errorMessage,
 }) => {
-  const [currentClock, setCurrentClock] = useState<string>(getCurrentClockTime24());
   const [isBtnClicked, setIsBtnClicked] = useState(false);
 
   // Input refs for seamless auto-advance and backspace navigation
@@ -53,23 +54,55 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   const minutesInputRef = useRef<HTMLInputElement>(null);
   const secondsInputRef = useRef<HTMLInputElement>(null);
 
-  // Update live clock every 10 seconds
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setCurrentClock(getCurrentClockTime24());
-    }, 10000);
-    return () => clearInterval(timer);
-  }, []);
-
   const selectedShift = SHIFT_OPTIONS.find((s) => s.id === selectedShiftId);
 
   const firstHalfTimes = selectedShift ? getHalfDayShiftTimes(selectedShift, 'first_half') : null;
   const secondHalfTimes = selectedShift ? getHalfDayShiftTimes(selectedShift, 'second_half') : null;
 
-  const liveDisplayTime = (() => {
-    const [h, m] = currentClock.split(':').map(Number);
-    return formatMinutesToClockTime12h(h * 60 + m);
-  })();
+  // Scheduled Shift Start & Duration
+  const scheduledStart24 = (dayType === 'half_day' && (shiftHalf === 'first_half' ? firstHalfTimes : secondHalfTimes))
+    ? (shiftHalf === 'first_half' ? firstHalfTimes!.startTime : secondHalfTimes!.startTime)
+    : (selectedShift?.startTime || '09:00');
+
+  const currentRules = selectedShift ? getShiftRules(selectedShift, dayType) : null;
+  const shiftDuration = currentRules?.shiftDurationMinutes || 540;
+
+  // Actual login 24h & formatted
+  const actualLogin24 = customLoginTime.trim()
+    ? (parseTimeTo24h(customLoginTime.trim()) || scheduledStart24)
+    : scheduledStart24;
+
+  const [aH, aM] = actualLogin24.split(':').map(Number);
+  const actualLogin12 = formatMinutesToClockTime12h(aH * 60 + aM);
+
+  const [sH, sM] = scheduledStart24.split(':').map(Number);
+  const scheduledStart12 = formatMinutesToClockTime12h(sH * 60 + sM);
+
+  const scheduledEnd24 = (dayType === 'half_day' && (shiftHalf === 'first_half' ? firstHalfTimes : secondHalfTimes))
+    ? (shiftHalf === 'first_half' ? firstHalfTimes!.endTime : secondHalfTimes!.endTime)
+    : (selectedShift?.endTime || '18:00');
+
+  const lateMinutesDiff = calculateElapsedMinutesBetween(scheduledStart24, actualLogin24);
+  const isLate = lateMinutesDiff > 0 && lateMinutesDiff < 720;
+
+  let attendanceStatus: 'on_time' | 'late_reporting' | 'late_login' = 'on_time';
+  if (isLate && lateMinutesDiff > 15) {
+    attendanceStatus = 'late_login';
+  } else if (isLate && lateMinutesDiff >= 3) {
+    attendanceStatus = 'late_reporting';
+  } else {
+    attendanceStatus = 'on_time';
+  }
+
+  // If late <= 2 min (on time / grace period): logout at scheduled end (e.g. 1:02 PM -> 10:30 PM)
+  // If late 3-15 min (late reporting): logout shifted by late minutes (e.g. 1:03 PM -> 10:33 PM)
+  // If late > 15 min (late login): logout is actual login + shift duration
+  const expectedLogout24 = (attendanceStatus === 'on_time')
+    ? scheduledEnd24
+    : addMinutesToClock24(actualLogin24, shiftDuration);
+
+  const [eH, eM] = expectedLogout24.split(':').map(Number);
+  const expectedLogout12 = formatMinutesToClockTime12h(eH * 60 + eM);
 
   const handleFormSubmit = (e: React.FormEvent) => {
     setIsBtnClicked(true);
@@ -101,10 +134,12 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
     onChangeWorkedSeconds(raw);
   };
 
-  // Keyboard navigation (Backspace backwards, Arrow keys)
+  // Keyboard navigation: Space or Enter in Hours advances to Minutes
   const handleHoursKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'ArrowRight' && minutesInputRef.current) {
+    if ((e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') && minutesInputRef.current) {
+      e.preventDefault();
       minutesInputRef.current.focus();
+      minutesInputRef.current.select();
     }
   };
 
@@ -113,8 +148,10 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
       hoursInputRef.current.focus();
     } else if (e.key === 'ArrowLeft' && hoursInputRef.current) {
       hoursInputRef.current.focus();
-    } else if (e.key === 'ArrowRight' && secondsInputRef.current) {
+    } else if ((e.key === ' ' || e.key === 'Enter' || e.key === 'ArrowRight') && secondsInputRef.current) {
+      e.preventDefault();
       secondsInputRef.current.focus();
+      secondsInputRef.current.select();
     }
   };
 
@@ -153,70 +190,67 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   const hasAnyTimeInput = Boolean(workedHours || workedMinutes || workedSeconds);
 
   return (
-    <form onSubmit={handleFormSubmit} className="h-full flex-1 flex flex-col justify-between gap-5" noValidate>
-      <div className="space-y-4">
+    <form onSubmit={handleFormSubmit} className="h-full flex-1 flex flex-col justify-between gap-2.5" noValidate>
+      <div className="space-y-2.5">
         {/* Step 1: Select Shift & Shift Duration */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded-full bg-[#00e599] text-slate-950 font-extrabold text-xs flex items-center justify-center flex-shrink-0 shadow-sm">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-[#00e599] text-slate-950 font-extrabold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
               1
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white leading-tight">Select Shift & Duration</h3>
-              <p className="text-[11px] text-slate-400">Choose your shift and day type</p>
-            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">Select Shift & Duration</h3>
           </div>
 
-          <div className="space-y-2 pt-0.5">
+          <div className="space-y-1.5 pt-0.5">
             {/* Shift Select Dropdown */}
-            <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3.5 py-2.5 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
-              <Calendar className="w-4 h-4 text-[#00e599] mr-3 flex-shrink-0" />
+            <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3 py-1.5 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
+              <Calendar className="w-3.5 h-3.5 text-[#00e599] mr-2.5 flex-shrink-0" />
               <select
                 id="shift-select"
                 value={selectedShiftId}
                 onChange={(e) => onSelectShift(e.target.value)}
-                className="w-full bg-transparent text-sm font-semibold text-white placeholder-slate-400 focus:outline-none appearance-none pr-8 cursor-pointer"
+                className="w-full bg-transparent text-xs font-semibold text-white placeholder-slate-400 focus:outline-none appearance-none pr-7 cursor-pointer"
               >
                 <option value="" disabled className="bg-[#0e1a24] text-slate-400">
                   Select your shift
                 </option>
                 {SHIFT_OPTIONS.map((shift) => (
-                  <option key={shift.id} value={shift.id} className="bg-[#0e1a24] text-slate-100 py-1">
+                  <option key={shift.id} value={shift.id} className="bg-[#0e1a24] text-slate-100 py-0.5">
                     {shift.label}
                   </option>
                 ))}
               </select>
-              <div className="absolute right-3.5 pointer-events-none text-slate-400">
-                <ChevronDown className="w-4 h-4" />
+              <div className="absolute right-3 pointer-events-none text-slate-400">
+                <ChevronDown className="w-3.5 h-3.5" />
               </div>
             </div>
 
             {/* Day Type Selector: Full Day vs Half Day */}
-            <div className="grid grid-cols-2 gap-2 bg-[#0c1822] p-1 rounded-xl border border-slate-700/80">
+            <div className="grid grid-cols-2 gap-1.5 bg-[#0c1822] p-0.5 rounded-xl border border-slate-700/80">
               <button
                 type="button"
                 id="daytype-full-btn"
                 onClick={() => onChangeDayType('full_day')}
-                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   dayType === 'full_day'
                     ? 'bg-[#00e599] text-slate-950 shadow-sm font-extrabold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
                 }`}
               >
-                <Sun className="w-3.5 h-3.5" />
+                <Sun className="w-3 h-3" />
                 <span>Full Day</span>
               </button>
               <button
                 type="button"
                 id="daytype-half-btn"
                 onClick={() => onChangeDayType('half_day')}
-                className={`py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                className={`py-1.5 px-2.5 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   dayType === 'half_day'
                     ? 'bg-[#00e599] text-slate-950 shadow-sm font-extrabold'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/40'
                 }`}
               >
-                <Sunset className="w-3.5 h-3.5" />
+                <Sunset className="w-3 h-3" />
                 <span>Half Day</span>
               </button>
             </div>
@@ -229,7 +263,7 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     Which Half?
                   </span>
                   <span className="text-[10px] text-[#00e599] font-semibold">
-                    4:30 work + 30m break
+                    {selectedShift?.isGBJ ? '3:30 work + 30m break' : '4:30 work + 30m break'}
                   </span>
                 </div>
                 <div className="grid grid-cols-2 gap-2 bg-[#0c1822] p-1 rounded-xl border border-slate-700/80">
@@ -271,21 +305,100 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
               </div>
             )}
 
+            {/* Custom Login Time Input (Only custom entering, no preset buttons) */}
+            {selectedShift && (
+              <div className="bg-[#0c1822] border border-slate-700/80 rounded-xl p-2.5 space-y-1.5 animate-smooth-in">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                    <LogIn className="w-3.5 h-3.5 text-[#00e599]" />
+                    <span>Actual Login Time</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">
+                    Scheduled: <strong className="text-white">{scheduledStart12}</strong>
+                  </span>
+                </div>
+
+                {/* Direct Custom Time Input */}
+                <div className="relative flex items-center bg-[#11202b] border border-slate-700/80 rounded-xl px-3 py-1.5 shadow-inner focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
+                  <Timer className="w-3.5 h-3.5 text-[#00e599] mr-2 flex-shrink-0" />
+                  <input
+                    id="custom-login-input"
+                    type="text"
+                    value={customLoginTime}
+                    onChange={(e) => onChangeCustomLoginTime(e.target.value)}
+                    placeholder={`e.g. ${scheduledStart12} or 1:03 PM`}
+                    className="w-full bg-transparent text-xs font-bold text-white placeholder-slate-500 focus:outline-none font-mono"
+                    autoComplete="off"
+                  />
+                  {customLoginTime && (
+                    <button
+                      type="button"
+                      onClick={() => onChangeCustomLoginTime('')}
+                      className="text-slate-400 hover:text-white text-xs p-1 rounded-lg hover:bg-slate-800 cursor-pointer ml-1.5 flex-shrink-0"
+                      title="Clear custom login (revert to scheduled)"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Real-time Dynamic Status Pill */}
+                <div className="bg-[#11202b]/90 border border-slate-700/60 rounded-lg px-2.5 py-1 text-[10px] flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 text-slate-300">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span>Login: <strong className="text-white">{actualLogin12}</strong></span>
+                    {attendanceStatus === 'on_time' ? (
+                      <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/80 border border-emerald-800 px-1.5 py-0.2 rounded-full">
+                        {lateMinutesDiff > 0 ? `On Time (${lateMinutesDiff}m Grace)` : 'On Time'}
+                      </span>
+                    ) : attendanceStatus === 'late_reporting' ? (
+                      <span className="text-[10px] font-bold text-amber-300 bg-amber-950/90 border border-amber-700 px-1.5 py-0.2 rounded-full">
+                        Late Reporting (+{lateMinutesDiff}m)
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-bold text-rose-300 bg-rose-950/90 border border-rose-800 px-1.5 py-0.2 rounded-full">
+                        Late Login (+{lateMinutesDiff}m)
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    Logout:{' '}
+                    <strong className="text-[#00e599] font-extrabold text-xs">
+                      {expectedLogout12}
+                    </strong>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Shift Rules Info Badge */}
             {selectedShift && (
               <div className="flex items-center gap-1.5 text-[11px] text-slate-300 px-1 pt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#00e599] flex-shrink-0" />
                 <span>
                   {dayType === 'half_day' ? (
-                    <>
-                      <strong className="text-[#00e599] font-bold">
-                        Half Day ({shiftHalf === 'first_half' ? '1st Half' : '2nd Half'}):
-                      </strong>{' '}
-                      5h total (4h 30m work required, 30m break)
-                    </>
+                    selectedShift.isGBJ ? (
+                      <>
+                        <strong className="text-[#00e599] font-bold">
+                          GBJ Half Day ({shiftHalf === 'first_half' ? '1st Half' : '2nd Half'}):
+                        </strong>{' '}
+                        4h total (3h 30m work required, 30m break)
+                      </>
+                    ) : (
+                      <>
+                        <strong className="text-[#00e599] font-bold">
+                          Half Day ({shiftHalf === 'first_half' ? '1st Half' : '2nd Half'}):
+                        </strong>{' '}
+                        5h total (4h 30m work required, 30m break)
+                      </>
+                    )
                   ) : selectedShift.isGBJ ? (
                     <>
-                      <strong className="text-[#00e599] font-bold">GBJ Shift:</strong> 7h total (6h work required, 1h break)
+                      <strong className="text-[#00e599] font-bold">Great Break Job (GBJ):</strong> 7h total (6h 30m work required, 30m break)
+                    </>
+                  ) : (selectedShift.allowedBreakMinutes === 30 || selectedShift.id === 'shift-1' || selectedShift.id === 'shift-2' || selectedShift.id === 'shift-9') ? (
+                    <>
+                      <strong className="text-[#00e599] font-bold">Regular Shift:</strong> 9h total (8h 30m work required, 30m break)
                     </>
                   ) : (
                     <>
@@ -299,22 +412,19 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
         </div>
 
         {/* Step 2: Worked Time (Hours, Minutes, Seconds Optional) */}
-        <div className="space-y-2">
-          <div className="flex items-center gap-2.5">
-            <div className="w-5 h-5 rounded-full bg-[#00e599] text-slate-950 font-extrabold text-xs flex items-center justify-center flex-shrink-0 shadow-sm">
+        <div className="space-y-1.5">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded-full bg-[#00e599] text-slate-950 font-extrabold text-[10px] flex items-center justify-center flex-shrink-0 shadow-sm">
               2
             </div>
-            <div>
-              <h3 className="text-sm font-bold text-white leading-tight">Worked Time</h3>
-              <p className="text-[11px] text-slate-400">Enter total time actually worked</p>
-            </div>
+            <h3 className="text-xs sm:text-sm font-bold text-white leading-tight">Worked Time</h3>
           </div>
 
-          <div className="space-y-1.5 pt-0.5">
+          <div className="space-y-1">
             {/* 3-Segment Input: Hours (2 digits), Minutes (2 digits), Seconds (2 digits, optional) */}
-            <div className="relative flex items-center justify-between bg-[#11202b] border border-slate-700/80 rounded-xl px-3 sm:px-4 py-2.5 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <Clock className="w-4 h-4 text-[#00e599] flex-shrink-0" />
+            <div className="relative flex items-center justify-between bg-[#11202b] border border-slate-700/80 rounded-xl px-3 py-1.5 shadow-inner hover:border-slate-600 focus-within:ring-2 focus-within:ring-[#00e599]/30 focus-within:border-[#00e599] transition-all">
+              <div className="flex items-center gap-2 sm:gap-2.5">
+                <Clock className="w-3.5 h-3.5 text-[#00e599] flex-shrink-0" />
 
                 {/* Segment: Hours */}
                 <div className="flex flex-col items-center">
@@ -329,15 +439,15 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     onKeyDown={handleHoursKeyDown}
                     onPaste={handlePaste}
                     placeholder="HH"
-                    className="w-11 sm:w-12 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-1 text-sm sm:text-base font-bold text-white placeholder-slate-500 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
+                    className="w-9 sm:w-10 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-0.5 text-xs sm:text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
                     autoComplete="off"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 font-medium select-none">
+                  <span className="text-[9px] text-slate-400 mt-0.5 font-medium select-none">
                     Hours
                   </span>
                 </div>
 
-                <span className="text-base sm:text-lg font-bold text-slate-500 self-center mb-4 select-none">
+                <span className="text-sm sm:text-base font-bold text-slate-500 self-center mb-3 select-none">
                   :
                 </span>
 
@@ -354,15 +464,15 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     onKeyDown={handleMinutesKeyDown}
                     onPaste={handlePaste}
                     placeholder="MM"
-                    className="w-11 sm:w-12 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-1 text-sm sm:text-base font-bold text-white placeholder-slate-500 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
+                    className="w-9 sm:w-10 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-0.5 text-xs sm:text-sm font-bold text-white placeholder-slate-500 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
                     autoComplete="off"
                   />
-                  <span className="text-[10px] text-slate-400 mt-1 font-medium select-none">
+                  <span className="text-[9px] text-slate-400 mt-0.5 font-medium select-none">
                     Mins
                   </span>
                 </div>
 
-                <span className="text-base sm:text-lg font-bold text-slate-500 self-center mb-4 select-none">
+                <span className="text-sm sm:text-base font-bold text-slate-500 self-center mb-3 select-none">
                   :
                 </span>
 
@@ -379,10 +489,10 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                     onKeyDown={handleSecondsKeyDown}
                     onPaste={handlePaste}
                     placeholder="SS"
-                    className="w-11 sm:w-12 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-1 text-sm sm:text-base font-bold text-white placeholder-slate-600 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
+                    className="w-9 sm:w-10 text-center bg-[#0c1822] border border-slate-700/70 rounded-lg py-0.5 text-xs sm:text-sm font-bold text-white placeholder-slate-600 focus:outline-none focus:border-[#00e599] focus:ring-1 focus:ring-[#00e599] font-mono tracking-wider transition-all"
                     autoComplete="off"
                   />
-                  <span className="text-[10px] text-slate-500 mt-1 font-medium select-none">
+                  <span className="text-[9px] text-slate-500 mt-0.5 font-medium select-none">
                     Secs (opt)
                   </span>
                 </div>
@@ -393,87 +503,35 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
                 <button
                   type="button"
                   onClick={handleClearTime}
-                  className="text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800 cursor-pointer flex-shrink-0"
+                  className="text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800 cursor-pointer flex-shrink-0"
                   aria-label="Clear time inputs"
                   title="Clear inputs"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="text-[11px] text-slate-400 flex items-center justify-between px-1">
+            <div className="text-[10px] text-slate-400 flex items-center justify-between px-1">
               <span>
                 Format: <span className="font-semibold text-slate-300">HH : MM : SS</span>{' '}
-                <span className="text-slate-500">(e.g. 08:27 or 08:27:30)</span>
+                <span className="text-slate-500">(Space/Enter advances)</span>
               </span>
-              <span className="text-slate-500 text-[10px]">Seconds optional</span>
+              <span className="text-slate-500">Seconds optional</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bottom Section: Clock reference + Action button */}
-      <div className="space-y-3.5 pt-2">
-        {/* Live Clock / Logout Time Controls */}
-        <div className="bg-[#0f1d27] border border-slate-700/60 rounded-xl p-2.5 sm:p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs flex-wrap gap-2">
-            <span className="text-[11px] font-medium text-slate-300 flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-[#00e599] animate-pulse" />
-              Current Time: <strong className="text-white ml-0.5">{liveDisplayTime}</strong>
-            </span>
-
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => onChangeCalculationMode('current_time')}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
-                  calculationMode === 'current_time'
-                    ? 'bg-[#00e599] text-slate-950 shadow-2xs font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Use Live
-              </button>
-              <button
-                type="button"
-                onClick={() => onChangeCalculationMode('logout_time')}
-                className={`px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
-                  calculationMode === 'logout_time'
-                    ? 'bg-[#00e599] text-slate-950 shadow-2xs font-bold'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                Custom Logout
-              </button>
-            </div>
-          </div>
-
-          {/* Custom Logout Time Input */}
-          {calculationMode === 'logout_time' && (
-            <div className="flex items-center gap-2 pt-2 border-t border-slate-700/50">
-              <label htmlFor="custom-logout-input" className="text-[11px] font-semibold text-slate-300 whitespace-nowrap">
-                Logout Time:
-              </label>
-              <input
-                id="custom-logout-input"
-                type="text"
-                value={customLogoutTime}
-                onChange={(e) => onChangeCustomLogoutTime(e.target.value)}
-                placeholder="e.g. 10:15 PM or 22:15"
-                className="bg-[#09151e] border border-slate-700 text-white rounded-lg px-2.5 py-1 text-xs placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-[#00e599] flex-1 font-mono"
-              />
-            </div>
-          )}
-        </div>
-
+      {/* Bottom Section: Action button & error */}
+      <div className="space-y-1.5 pt-0.5">
         {/* Validation Error Message */}
         {errorMessage && (
           <div
             role="alert"
-            className="flex items-center gap-2 px-3 py-2 bg-rose-950/70 border border-rose-800 text-rose-300 rounded-xl text-xs font-medium animate-smooth-in"
+            className="flex items-center gap-2 px-3 py-1.5 bg-rose-950/70 border border-rose-800 text-rose-300 rounded-xl text-xs font-medium animate-smooth-in"
           >
-            <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+            <AlertCircle className="w-3.5 h-3.5 flex-shrink-0 text-rose-400" />
             <span>{errorMessage}</span>
           </div>
         )}
@@ -482,15 +540,15 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
         <button
           type="submit"
           id="check-break-button"
-          className={`w-full bg-[#00e599] hover:bg-[#00d68f] active:scale-[0.98] text-slate-950 font-extrabold py-3.5 px-6 rounded-2xl shadow-[0_0_24px_rgba(0,229,153,0.35)] transition-all duration-200 flex items-center justify-between group cursor-pointer ${
+          className={`w-full bg-[#00e599] hover:bg-[#00d68f] active:scale-[0.98] text-slate-950 font-extrabold py-2 px-4 rounded-xl shadow-[0_0_18px_rgba(0,229,153,0.3)] transition-all duration-200 flex items-center justify-between group cursor-pointer ${
             isBtnClicked ? 'scale-[0.98] brightness-110' : ''
           }`}
         >
-          <div className="flex items-center gap-2.5">
-            <Coffee className="w-5 h-5 text-slate-950 transition-transform group-hover:scale-110" />
-            <span className="text-sm font-extrabold tracking-wide text-slate-950">Check Break</span>
+          <div className="flex items-center gap-2">
+            <Coffee className="w-4 h-4 text-slate-950 transition-transform group-hover:scale-110" />
+            <span className="text-xs sm:text-sm font-extrabold tracking-wide text-slate-950">Check Break</span>
           </div>
-          <ArrowRight className="w-5 h-5 text-slate-950 transition-transform group-hover:translate-x-1" />
+          <ArrowRight className="w-4 h-4 text-slate-950 transition-transform group-hover:translate-x-1" />
         </button>
       </div>
     </form>

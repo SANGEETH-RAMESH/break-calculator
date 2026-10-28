@@ -1,27 +1,45 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { SHIFT_OPTIONS } from './constants/shifts';
-import type { CalculationResult, TimeCalculationMode, DayType, ShiftHalf } from './types/shift';
-import {
-  parseTimeToMinutes,
-  calculateLiveShiftBreak,
-  calculateBreak,
-} from './utils/timeCalculations';
+import { getCurrentTimePeriod, type TimePeriod } from './constants/timePeriods';
+import type { CalculationResult, DayType, ShiftHalf } from './types/shift';
+import { calculateLiveShiftBreak } from './utils/timeCalculations';
 import { Header } from './components/Header';
 import { CalculatorForm } from './components/CalculatorForm';
 import { ResultsDisplay } from './components/ResultsDisplay';
-import { TestScenariosModal } from './components/TestScenariosModal';
+
+const DEFAULT_SHIFT_STORAGE_KEY = 'break_calculator_default_shift';
 
 export const App: React.FC = () => {
-  // Clean initial state with NO default values, default full day
-  const [selectedShiftId, setSelectedShiftId] = useState<string>('');
+  // Load default shift from localStorage if previously selected
+  const [selectedShiftId, setSelectedShiftId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(DEFAULT_SHIFT_STORAGE_KEY);
+      if (saved && SHIFT_OPTIONS.some((s) => s.id === saved)) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return '';
+  });
+
   const [dayType, setDayType] = useState<DayType>('full_day');
   const [shiftHalf, setShiftHalf] = useState<ShiftHalf>('first_half');
+  const [customLoginTime, setCustomLoginTime] = useState<string>('');
   const [workedHours, setWorkedHours] = useState<string>('');
   const [workedMinutes, setWorkedMinutes] = useState<string>('');
   const [workedSeconds, setWorkedSeconds] = useState<string>('');
-  const [calculationMode, setCalculationMode] = useState<TimeCalculationMode>('current_time');
-  const [customLogoutTime, setCustomLogoutTime] = useState<string>('');
   const [animationKey, setAnimationKey] = useState<number>(0);
+
+  // Dynamic Time-of-Day Period (morning, noon, evening, night)
+  const [timePeriod, setTimePeriod] = useState<TimePeriod>(() => getCurrentTimePeriod());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimePeriod(getCurrentTimePeriod());
+    }, 15000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Result starts as null so initially only the first card/table is displayed
   const [result, setResult] = useState<CalculationResult | null>(null);
@@ -30,7 +48,21 @@ export const App: React.FC = () => {
   const [mobileView, setMobileView] = useState<'form' | 'results'>('form');
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isTestModalOpen, setIsTestModalOpen] = useState<boolean>(false);
+
+  // When a user selects a shift, save it as their default in localStorage
+  const handleSelectShift = (id: string) => {
+    setSelectedShiftId(id);
+    if (errorMessage) setErrorMessage(null);
+    try {
+      if (id) {
+        localStorage.setItem(DEFAULT_SHIFT_STORAGE_KEY, id);
+      } else {
+        localStorage.removeItem(DEFAULT_SHIFT_STORAGE_KEY);
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   // Form submission / calculation trigger
   const handleCalculate = (e: React.FormEvent) => {
@@ -71,33 +103,18 @@ export const App: React.FC = () => {
 
     const totalMinutes = h * 60 + m + s / 60;
 
-    let refClock24: string | undefined = undefined;
-    if (calculationMode === 'logout_time') {
-      if (!customLogoutTime.trim()) {
-        setErrorMessage('Please enter your logout time (e.g. 10:15 PM or 22:15).');
-        return;
-      }
-      const parsedLogout = parseTimeToMinutes(customLogoutTime);
-      if (!parsedLogout.isValid || parsedLogout.minutes === undefined) {
-        setErrorMessage(parsedLogout.error || 'Please enter a valid logout time (e.g. 10:15 PM).');
-        return;
-      }
-      const logoutHours = Math.floor(parsedLogout.minutes / 60);
-      const logoutMins = parsedLogout.minutes % 60;
-      refClock24 = `${String(logoutHours).padStart(2, '0')}:${String(logoutMins).padStart(2, '0')}`;
-    }
-
     setErrorMessage(null);
 
-    // Calculate break results from worked time (supporting optional seconds, day type, and shift half)
+    // Calculate break results using live time and custom login if provided
     const calculated = calculateLiveShiftBreak(
       shift,
       totalMinutes,
-      refClock24,
-      calculationMode,
+      undefined,
+      'current_time',
       s,
       dayType,
-      shiftHalf
+      shiftHalf,
+      customLoginTime
     );
     setResult(calculated);
 
@@ -106,44 +123,25 @@ export const App: React.FC = () => {
     setAnimationKey((prev) => prev + 1);
   };
 
-  // Preset helper for test modal
-  const handleApplyPreset = (
-    shiftId: string,
-    workedTimeStr: string,
-    presetDayType: DayType = 'full_day',
-    presetShiftHalf: ShiftHalf = 'first_half'
-  ) => {
-    setSelectedShiftId(shiftId);
-    setDayType(presetDayType);
-    setShiftHalf(presetShiftHalf);
-    setErrorMessage(null);
-
-    const parts = workedTimeStr.split(':');
-    setWorkedHours(parts[0] || '');
-    setWorkedMinutes(parts[1] || '');
-    setWorkedSeconds(parts[2] || '');
-
-    const shift = SHIFT_OPTIONS.find((s) => s.id === shiftId);
-    if (shift) {
-      const parsed = parseTimeToMinutes(workedTimeStr);
-      if (parsed.isValid && parsed.minutes !== undefined) {
-        const res = calculateBreak(shift, parsed.minutes, presetDayType, presetShiftHalf);
-        setResult(res);
-        setMobileView('results');
-        setAnimationKey((prev) => prev + 1);
-      }
-    }
-  };
-
   const handleReset = () => {
-    setSelectedShiftId('');
+    // Keep saved default shift from localStorage so user doesn't have to re-select every time
+    let defaultShift = '';
+    try {
+      const saved = localStorage.getItem(DEFAULT_SHIFT_STORAGE_KEY);
+      if (saved && SHIFT_OPTIONS.some((s) => s.id === saved)) {
+        defaultShift = saved;
+      }
+    } catch {
+      // ignore
+    }
+
+    setSelectedShiftId(defaultShift);
     setDayType('full_day');
     setShiftHalf('first_half');
+    setCustomLoginTime('');
     setWorkedHours('');
     setWorkedMinutes('');
     setWorkedSeconds('');
-    setCustomLogoutTime('');
-    setCalculationMode('current_time');
     setErrorMessage(null);
     setResult(null);
     setMobileView('form');
@@ -154,20 +152,20 @@ export const App: React.FC = () => {
 
   return (
     <div
-      className="min-h-screen w-full relative bg-cover bg-center bg-no-repeat flex flex-col justify-center items-center p-4 sm:p-6 lg:p-8 overflow-x-hidden text-slate-100 font-sans bg-[url('/mobile_background.png')] lg:bg-[url('/background.png')]"
+      className={`min-h-screen w-full relative bg-cover bg-center bg-no-repeat flex flex-col justify-center items-center p-2 sm:p-4 lg:py-3 lg:px-6 overflow-x-hidden text-slate-100 font-sans transition-all duration-700 bg-period-${timePeriod}`}
     >
       {/* Dark Ambient Layer */}
       <div className="absolute inset-0 bg-black/45 backdrop-brightness-[0.92] pointer-events-none" />
 
       {/* Top Right Calligraphy: "Good Breaks Better Work" */}
-      <div className="absolute top-6 right-8 pointer-events-none hidden md:block z-10 text-right select-none">
-        <div className="font-script text-[#00e599] text-3xl sm:text-4xl font-bold leading-tight rotate-[-4deg] tracking-tight drop-shadow-[0_0_15px_rgba(0,229,153,0.35)]">
+      <div className="absolute top-4 right-6 pointer-events-none hidden md:block z-10 text-right select-none">
+        <div className="font-script text-[#00e599] text-2xl sm:text-3xl font-bold leading-tight rotate-[-4deg] tracking-tight drop-shadow-[0_0_15px_rgba(0,229,153,0.35)]">
           Good Breaks
         </div>
-        <div className="font-script text-[#00e599] text-3xl sm:text-4xl font-bold leading-tight rotate-[-4deg] tracking-tight relative inline-block drop-shadow-[0_0_15px_rgba(0,229,153,0.35)]">
+        <div className="font-script text-[#00e599] text-2xl sm:text-3xl font-bold leading-tight rotate-[-4deg] tracking-tight relative inline-block drop-shadow-[0_0_15px_rgba(0,229,153,0.35)]">
           Better Work
           <svg
-            className="absolute -bottom-1.5 right-0 w-24 text-[#00e599] overflow-visible"
+            className="absolute -bottom-1.5 right-0 w-20 text-[#00e599] overflow-visible"
             viewBox="0 0 100 20"
             fill="none"
             stroke="currentColor"
@@ -180,38 +178,35 @@ export const App: React.FC = () => {
       </div>
 
       {/* Left Inspiring Quote Overlay */}
-      <div className="absolute left-8 lg:left-12 top-1/2 -translate-y-1/2 max-w-[190px] hidden xl:block z-10 pointer-events-none select-none">
-        <p className="text-sm font-semibold text-slate-200/90 leading-relaxed tracking-wide drop-shadow-md">
+      <div className="absolute left-6 lg:left-8 top-1/2 -translate-y-1/2 max-w-[170px] hidden xl:block z-10 pointer-events-none select-none">
+        <p className="text-xs sm:text-sm font-semibold text-slate-200/90 leading-relaxed tracking-wide drop-shadow-md">
           A short break <br />
           today, <br />
           a better you <br />
           tomorrow.
         </p>
-        <div className="w-8 h-1 bg-[#00e599] rounded-full mt-3 shadow-[0_0_10px_rgba(0,229,153,0.7)]" />
+        <div className="w-7 h-1 bg-[#00e599] rounded-full mt-2.5 shadow-[0_0_10px_rgba(0,229,153,0.7)]" />
       </div>
 
       {/* Main Content Area */}
       <div
         className={`relative z-20 w-full transition-all duration-600 ease-out ${
-          isCalculated ? 'max-w-5xl xl:max-w-6xl' : 'max-w-[460px]'
+          isCalculated ? 'max-w-5xl xl:max-w-6xl' : 'max-w-[430px]'
         }`}
       >
         {/* Top Header Bar */}
-        <Header onReset={handleReset} onOpenTestModal={() => setIsTestModalOpen(true)} />
+        <Header onReset={handleReset} />
 
         {/* ============================================================== */}
         {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Exact Same Height) */}
         {/* ============================================================== */}
         {isCalculated ? (
-          <div className="hidden lg:grid grid-cols-12 gap-6 items-stretch w-full">
-            {/* Card 1: Calculator Form (Locked to exact same height as Card 2 via grid stretch + min-h-[580px]) */}
-            <div className="col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[28px] p-6 sm:p-7 shadow-2xl flex flex-col justify-between h-full min-h-[580px] transition-all duration-300">
+          <div className="hidden lg:grid grid-cols-12 gap-5 items-stretch w-full">
+            {/* Card 1: Calculator Form */}
+            <div className="col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-4.5 shadow-2xl flex flex-col justify-between h-full min-h-0 transition-all duration-300">
               <CalculatorForm
                 selectedShiftId={selectedShiftId}
-                onSelectShift={(id) => {
-                  setSelectedShiftId(id);
-                  if (errorMessage) setErrorMessage(null);
-                }}
+                onSelectShift={handleSelectShift}
                 dayType={dayType}
                 onChangeDayType={(dt) => {
                   setDayType(dt);
@@ -220,6 +215,11 @@ export const App: React.FC = () => {
                 shiftHalf={shiftHalf}
                 onChangeShiftHalf={(sh) => {
                   setShiftHalf(sh);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                customLoginTime={customLoginTime}
+                onChangeCustomLoginTime={(val) => {
+                  setCustomLoginTime(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 workedHours={workedHours}
@@ -235,16 +235,6 @@ export const App: React.FC = () => {
                 workedSeconds={workedSeconds}
                 onChangeWorkedSeconds={(val) => {
                   setWorkedSeconds(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                calculationMode={calculationMode}
-                onChangeCalculationMode={(mode) => {
-                  setCalculationMode(mode);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                customLogoutTime={customLogoutTime}
-                onChangeCustomLogoutTime={(val) => {
-                  setCustomLogoutTime(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 onSubmit={handleCalculate}
@@ -252,25 +242,21 @@ export const App: React.FC = () => {
               />
             </div>
 
-            {/* Card 2: Status Results (Locked to exact same height as Card 1 via grid stretch + min-h-[580px]) */}
-            <div className="col-span-7 flex flex-col h-full min-h-[580px] animate-desktop-reveal">
+            {/* Card 2: Status Results */}
+            <div className="col-span-7 flex flex-col h-full min-h-0 animate-desktop-reveal">
               <ResultsDisplay
                 result={result}
                 animationKey={animationKey}
-                onQuickSelect={handleApplyPreset}
               />
             </div>
           </div>
         ) : (
           <div className="hidden lg:flex justify-center w-full">
             {/* Card 1 Alone (Centered before calculation) */}
-            <div className="w-[460px] bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[28px] p-6 sm:p-7 shadow-2xl flex flex-col justify-between transition-all duration-300">
+            <div className="w-[430px] bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-4.5 shadow-2xl flex flex-col justify-between min-h-0 transition-all duration-300">
               <CalculatorForm
                 selectedShiftId={selectedShiftId}
-                onSelectShift={(id) => {
-                  setSelectedShiftId(id);
-                  if (errorMessage) setErrorMessage(null);
-                }}
+                onSelectShift={handleSelectShift}
                 dayType={dayType}
                 onChangeDayType={(dt) => {
                   setDayType(dt);
@@ -279,6 +265,11 @@ export const App: React.FC = () => {
                 shiftHalf={shiftHalf}
                 onChangeShiftHalf={(sh) => {
                   setShiftHalf(sh);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                customLoginTime={customLoginTime}
+                onChangeCustomLoginTime={(val) => {
+                  setCustomLoginTime(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 workedHours={workedHours}
@@ -294,16 +285,6 @@ export const App: React.FC = () => {
                 workedSeconds={workedSeconds}
                 onChangeWorkedSeconds={(val) => {
                   setWorkedSeconds(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                calculationMode={calculationMode}
-                onChangeCalculationMode={(mode) => {
-                  setCalculationMode(mode);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                customLogoutTime={customLogoutTime}
-                onChangeCustomLogoutTime={(val) => {
-                  setCustomLogoutTime(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 onSubmit={handleCalculate}
@@ -319,13 +300,10 @@ export const App: React.FC = () => {
         <div className="lg:hidden w-full">
           {/* When in 'form' view: Show ONLY 1st Table */}
           {mobileView === 'form' && (
-            <div className="w-full bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[28px] p-6 shadow-2xl flex flex-col justify-between animate-mobile-slide-right">
+            <div className="w-full bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[22px] p-4 sm:p-5 shadow-2xl flex flex-col justify-between animate-mobile-slide-right">
               <CalculatorForm
                 selectedShiftId={selectedShiftId}
-                onSelectShift={(id) => {
-                  setSelectedShiftId(id);
-                  if (errorMessage) setErrorMessage(null);
-                }}
+                onSelectShift={handleSelectShift}
                 dayType={dayType}
                 onChangeDayType={(dt) => {
                   setDayType(dt);
@@ -334,6 +312,11 @@ export const App: React.FC = () => {
                 shiftHalf={shiftHalf}
                 onChangeShiftHalf={(sh) => {
                   setShiftHalf(sh);
+                  if (errorMessage) setErrorMessage(null);
+                }}
+                customLoginTime={customLoginTime}
+                onChangeCustomLoginTime={(val) => {
+                  setCustomLoginTime(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
                 workedHours={workedHours}
@@ -351,16 +334,6 @@ export const App: React.FC = () => {
                   setWorkedSeconds(val);
                   if (errorMessage) setErrorMessage(null);
                 }}
-                calculationMode={calculationMode}
-                onChangeCalculationMode={(mode) => {
-                  setCalculationMode(mode);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                customLogoutTime={customLogoutTime}
-                onChangeCustomLogoutTime={(val) => {
-                  setCustomLogoutTime(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
                 onSubmit={handleCalculate}
                 errorMessage={errorMessage}
               />
@@ -373,20 +346,12 @@ export const App: React.FC = () => {
               <ResultsDisplay
                 result={result}
                 animationKey={animationKey}
-                onQuickSelect={handleApplyPreset}
                 onBackToForm={() => setMobileView('form')}
               />
             </div>
           )}
         </div>
       </div>
-
-      {/* Test Scenarios Verification Modal */}
-      <TestScenariosModal
-        isOpen={isTestModalOpen}
-        onClose={() => setIsTestModalOpen(false)}
-        onApplyScenario={handleApplyPreset}
-      />
     </div>
   );
 };
