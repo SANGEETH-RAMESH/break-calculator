@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   Bell,
-  Volume2,
   Clock,
   ChevronDown,
   Check,
@@ -10,14 +9,13 @@ import {
 } from 'lucide-react';
 import {
   requestNotificationPermission,
-  playBreakAlertSound,
   subscribeAndSchedulePush,
 } from '../utils/reminderSound';
 
 export interface BreakReminderState {
   enabled: boolean;
   pushEnabled: boolean;
-  soundEnabled: boolean;
+  soundEnabled?: boolean;
   duration: number;
   unit: 'Minutes' | 'Seconds';
   targetTimestamp: number | null;
@@ -42,7 +40,6 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
   // Local form state
   const [enabled, setEnabled] = useState<boolean>(reminderState.enabled);
   const [pushEnabled, setPushEnabled] = useState<boolean>(reminderState.pushEnabled);
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(reminderState.soundEnabled);
   const [duration, setDuration] = useState<number>(reminderState.duration || 25);
   const [unit, setUnit] = useState<'Minutes' | 'Seconds'>(reminderState.unit || 'Minutes');
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
@@ -62,21 +59,13 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
     setPushEnabled(nextVal);
   };
 
-  const handleSoundToggle = () => {
-    const nextVal = !soundEnabled;
-    setSoundEnabled(nextVal);
-    if (nextVal) {
-      playBreakAlertSound();
-    }
-  };
-
   const handleSave = async () => {
     let serverScheduled = false;
     if (enabled && pushEnabled) {
       const granted = await requestNotificationPermission();
-      if (!granted && !soundEnabled) {
-        setPermissionNotice('Please allow notifications or enable sound alert.');
-      } else if (granted) {
+      if (!granted) {
+        setPermissionNotice('Please allow notifications in browser settings.');
+      } else {
         // Schedule server-side Web Push for true background delivery on iPhone & mobile!
         serverScheduled = await subscribeAndSchedulePush(Math.max(1, duration), unit);
       }
@@ -88,7 +77,7 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
     onSaveReminder({
       enabled,
       pushEnabled,
-      soundEnabled,
+      soundEnabled: false,
       duration: Math.max(1, duration),
       unit,
       targetTimestamp,
@@ -171,83 +160,41 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
         <label className="block text-xs font-bold text-white mb-2 tracking-wide">
           Notification Type
         </label>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Card 1: Push Notification */}
-          <div
-            onClick={handlePushToggle}
-            className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-              pushEnabled
-                ? 'border-[#00e599] bg-[#00e599]/10 shadow-[0_0_15px_rgba(0,229,153,0.15)] ring-1 ring-[#00e599]/50'
-                : 'border-slate-800 bg-[#07131e]/70 hover:border-slate-700 opacity-70'
-            }`}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                  pushEnabled
-                    ? 'bg-[#09261c] border border-[#14533d] text-[#00e599]'
-                    : 'bg-slate-800/80 text-slate-400'
-                }`}
-              >
-                <Bell className="w-4.5 h-4.5" />
-              </div>
-              <div
-                className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                  pushEnabled
-                    ? 'border-[#00e599] bg-[#00e599]'
-                    : 'border-slate-600'
-                }`}
-              >
-                {pushEnabled && <Check className="w-3.5 h-3.5 text-[#071a12] stroke-[3]" />}
-              </div>
+        {/* Push Notification Card */}
+        <div
+          onClick={handlePushToggle}
+          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
+            pushEnabled
+              ? 'border-[#00e599] bg-[#00e599]/10 shadow-[0_0_15px_rgba(0,229,153,0.15)] ring-1 ring-[#00e599]/50'
+              : 'border-slate-800 bg-[#07131e]/70 hover:border-slate-700 opacity-70'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                pushEnabled
+                  ? 'bg-[#09261c] border border-[#14533d] text-[#00e599]'
+                  : 'bg-slate-800/80 text-slate-400'
+              }`}
+            >
+              <Bell className="w-5 h-5" />
             </div>
             <div>
-              <p className={`text-xs font-bold ${pushEnabled ? 'text-white' : 'text-slate-300'}`}>
+              <p className={`text-xs sm:text-sm font-bold ${pushEnabled ? 'text-white' : 'text-slate-300'}`}>
                 Push Notification
               </p>
               <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug">
-                Browser notification (even when tab is inactive)
+                Delivered to your phone even when locked or app is closed
               </p>
             </div>
           </div>
 
-          {/* Card 2: Sound Alert */}
           <div
-            onClick={handleSoundToggle}
-            className={`p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between ${
-              soundEnabled
-                ? 'border-[#00e599] bg-[#00e599]/10 shadow-[0_0_15px_rgba(0,229,153,0.15)] ring-1 ring-[#00e599]/50'
-                : 'border-slate-800 bg-[#07131e]/70 hover:border-slate-700 opacity-70'
+            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
+              pushEnabled ? 'border-[#00e599] bg-[#00e599]' : 'border-slate-600'
             }`}
           >
-            <div className="flex items-start justify-between mb-2">
-              <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center ${
-                  soundEnabled
-                    ? 'bg-[#09261c] border border-[#14533d] text-[#00e599]'
-                    : 'bg-slate-800/80 text-slate-400'
-                }`}
-              >
-                <Volume2 className="w-4.5 h-4.5" />
-              </div>
-              <div
-                className={`w-5 h-5 rounded-full border flex items-center justify-center ${
-                  soundEnabled
-                    ? 'border-[#00e599] bg-[#00e599]'
-                    : 'border-slate-600'
-                }`}
-              >
-                {soundEnabled && <Check className="w-3.5 h-3.5 text-[#071a12] stroke-[3]" />}
-              </div>
-            </div>
-            <div>
-              <p className={`text-xs font-bold ${soundEnabled ? 'text-white' : 'text-slate-300'}`}>
-                Sound Alert
-              </p>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug">
-                Play a sound when break time is over
-              </p>
-            </div>
+            {pushEnabled && <Check className="w-3.5 h-3.5 text-[#071a12] stroke-[3]" />}
           </div>
         </div>
         {permissionNotice && (

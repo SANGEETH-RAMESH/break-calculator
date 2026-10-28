@@ -8,7 +8,7 @@ import { CalculatorForm } from './components/CalculatorForm';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { OverbreakModal } from './components/OverbreakModal';
 import { BreakReminderCard, type BreakReminderState } from './components/BreakReminderCard';
-import { triggerBreakNotification, playBreakAlertSound } from './utils/reminderSound';
+import { triggerBreakNotification } from './utils/reminderSound';
 
 const DEFAULT_SHIFT_STORAGE_KEY = 'break_calculator_default_shift';
 const REMINDER_STORAGE_KEY = 'break_calculator_reminder_config';
@@ -74,7 +74,6 @@ export const App: React.FC = () => {
     return {
       enabled: true,
       pushEnabled: true,
-      soundEnabled: false,
       duration: 25,
       unit: 'Minutes',
       targetTimestamp: null,
@@ -117,9 +116,6 @@ export const App: React.FC = () => {
           triggerBreakNotification(
             `${reminderState.duration} ${reminderState.unit.toLowerCase()}`
           );
-        }
-        if (reminderState.soundEnabled) {
-          playBreakAlertSound();
         }
 
         // Reset targetTimestamp
