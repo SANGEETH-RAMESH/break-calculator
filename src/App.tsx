@@ -312,7 +312,11 @@ export const App: React.FC = () => {
       </div>
 
       {/* Left Inspiring Quote Overlay */}
-      <div className="absolute left-6 lg:left-8 top-1/2 -translate-y-1/2 max-w-[170px] hidden xl:block z-10 pointer-events-none select-none">
+      <div
+        className={`absolute left-6 lg:left-8 top-1/2 -translate-y-1/2 max-w-[170px] hidden xl:block z-10 pointer-events-none select-none transition-opacity duration-500 ${
+          isCalculated ? 'xl:opacity-0 2xl:opacity-100' : 'opacity-100'
+        }`}
+      >
         <p className="text-xs sm:text-sm font-semibold text-slate-200/90 leading-relaxed tracking-wide drop-shadow-md">
           A short break <br />
           today, <br />
@@ -327,9 +331,7 @@ export const App: React.FC = () => {
         className={`relative z-20 w-full transition-all duration-500 ease-out ${
           mainView === 'reminder'
             ? 'max-w-[480px]'
-            : isCalculated
-            ? 'max-w-6xl xl:max-w-7xl'
-            : 'max-w-[460px]'
+            : 'max-w-[460px] lg:max-w-6xl xl:max-w-7xl'
         }`}
       >
         {/* Top Header Bar */}
@@ -359,102 +361,64 @@ export const App: React.FC = () => {
         ) : (
           <>
             {/* ============================================================== */}
-            {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Exact Same Height) */}
+            {/* DESKTOP LAYOUT (lg:grid): Card 1 + Card 2 (Split Animation)    */}
             {/* ============================================================== */}
-        {isCalculated ? (
-          <div className="hidden lg:grid grid-cols-12 gap-6 items-stretch w-full">
-            {/* Card 1: Calculator Form */}
-            <div className="col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 transition-all duration-300">
-              <CalculatorForm
-                selectedShiftId={selectedShiftId}
-                onSelectShift={handleSelectShift}
-                dayType={dayType}
-                onChangeDayType={(dt) => {
-                  setDayType(dt);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                shiftHalf={shiftHalf}
-                onChangeShiftHalf={(sh) => {
-                  setShiftHalf(sh);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                customLoginTime={customLoginTime}
-                onChangeCustomLoginTime={(val) => {
-                  setCustomLoginTime(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedHours={workedHours}
-                onChangeWorkedHours={(val) => {
-                  setWorkedHours(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedMinutes={workedMinutes}
-                onChangeWorkedMinutes={(val) => {
-                  setWorkedMinutes(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedSeconds={workedSeconds}
-                onChangeWorkedSeconds={(val) => {
-                  setWorkedSeconds(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                onSubmit={handleCalculate}
-                errorMessage={errorMessage}
-              />
-            </div>
+            <div className="hidden lg:grid grid-cols-12 gap-6 items-stretch w-full relative">
+              {/* Card 1: Calculator Form (slides smoothly from screen center to left column) */}
+              <div
+                className={`col-span-5 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 desktop-card1-transition z-20 ${
+                  isCalculated ? 'desktop-card1-left' : 'desktop-card1-center'
+                }`}
+              >
+                <CalculatorForm
+                  selectedShiftId={selectedShiftId}
+                  onSelectShift={handleSelectShift}
+                  dayType={dayType}
+                  onChangeDayType={(dt) => {
+                    setDayType(dt);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  shiftHalf={shiftHalf}
+                  onChangeShiftHalf={(sh) => {
+                    setShiftHalf(sh);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  customLoginTime={customLoginTime}
+                  onChangeCustomLoginTime={(val) => {
+                    setCustomLoginTime(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  workedHours={workedHours}
+                  onChangeWorkedHours={(val) => {
+                    setWorkedHours(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  workedMinutes={workedMinutes}
+                  onChangeWorkedMinutes={(val) => {
+                    setWorkedMinutes(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  workedSeconds={workedSeconds}
+                  onChangeWorkedSeconds={(val) => {
+                    setWorkedSeconds(val);
+                    if (errorMessage) setErrorMessage(null);
+                  }}
+                  onSubmit={handleCalculate}
+                  errorMessage={errorMessage}
+                />
+              </div>
 
-            {/* Card 2: Status Results */}
-            <div className="col-span-7 flex flex-col h-full min-h-0 animate-desktop-reveal">
-              <ResultsDisplay
-                result={result}
-                animationKey={animationKey}
-                onOpenOverbreakModal={() => setIsOverbreakModalOpen(true)}
-              />
+              {/* Card 2: Status Results (emerges smoothly from screen center to right column) */}
+              {isCalculated && (
+                <div className="col-span-7 flex flex-col h-full min-h-0 animate-desktop-card2-in z-10">
+                  <ResultsDisplay
+                    result={result}
+                    animationKey={animationKey}
+                    onOpenOverbreakModal={() => setIsOverbreakModalOpen(true)}
+                  />
+                </div>
+              )}
             </div>
-          </div>
-        ) : (
-          <div className="hidden lg:flex justify-center w-full">
-            {/* Card 1 Alone (Centered before calculation) */}
-            <div className="w-[460px] bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between min-h-0 transition-all duration-300">
-              <CalculatorForm
-                selectedShiftId={selectedShiftId}
-                onSelectShift={handleSelectShift}
-                dayType={dayType}
-                onChangeDayType={(dt) => {
-                  setDayType(dt);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                shiftHalf={shiftHalf}
-                onChangeShiftHalf={(sh) => {
-                  setShiftHalf(sh);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                customLoginTime={customLoginTime}
-                onChangeCustomLoginTime={(val) => {
-                  setCustomLoginTime(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedHours={workedHours}
-                onChangeWorkedHours={(val) => {
-                  setWorkedHours(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedMinutes={workedMinutes}
-                onChangeWorkedMinutes={(val) => {
-                  setWorkedMinutes(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                workedSeconds={workedSeconds}
-                onChangeWorkedSeconds={(val) => {
-                  setWorkedSeconds(val);
-                  if (errorMessage) setErrorMessage(null);
-                }}
-                onSubmit={handleCalculate}
-                errorMessage={errorMessage}
-              />
-            </div>
-          </div>
-        )}
 
         {/* ============================================================== */}
         {/* MOBILE LAYOUT (< lg): Show ONLY 1 Card at a time               */}
