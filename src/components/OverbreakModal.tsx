@@ -103,7 +103,7 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
 
           {/* Main Overbreak Character Image */}
           <img
-            src="/overbreak.gif"
+            src="/overbreak.png"
             alt="Thambi Thappu! Overbreak"
             className="w-[280px] sm:w-[340px] max-w-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-transform duration-300 hover:scale-105"
           />
