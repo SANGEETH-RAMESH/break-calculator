@@ -19,9 +19,15 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    // Preload both frames so switching is instant with zero network lag or blank flash
+    const img1 = new Image();
+    img1.src = '/overbreak.png';
+    const img2 = new Image();
+    img2.src = '/overbreak2.png';
+
     const interval = setInterval(() => {
       setActiveFrame((prev) => (prev === 0 ? 1 : 0));
-    }, 400);
+    }, 1000);
 
     return () => clearInterval(interval);
   }, [isOpen]);
@@ -115,24 +121,11 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
           <div className="absolute right-1/4 top-5 w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.8)] animate-ping" style={{ animationDelay: '0.7s' }} />
 
           {/* Main Overbreak Character Image (1-second alternating finger wag: overbreak.png <-> overbreak2.png) */}
-          <div className="relative w-[280px] sm:w-[340px] max-w-full flex items-center justify-center">
-            {/* Frame 1: Finger pointing straight up */}
-            <img
-              src="/overbreak.png"
-              alt="Thambi Thappu! Finger Up"
-              className={`w-full h-auto object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-opacity duration-150 pointer-events-auto hover:scale-105 ${
-                activeFrame === 0 ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-            {/* Frame 2: Finger pointing tilted (125% angle) */}
-            <img
-              src="/overbreak2.png"
-              alt="Thambi Thappu! Finger Tilted"
-              className={`absolute inset-0 w-full h-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] transition-opacity duration-150 pointer-events-auto hover:scale-105 ${
-                activeFrame === 1 ? 'opacity-100' : 'opacity-0'
-              }`}
-            />
-          </div>
+          <img
+            src={activeFrame === 0 ? '/overbreak.png' : '/overbreak2.png'}
+            alt="Thambi Thappu! Overbreak"
+            className="w-[280px] sm:w-[340px] max-w-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] pointer-events-auto hover:scale-105"
+          />
         </div>
 
         {/* Modal Card Content with Neon Red Border & Glow */}
