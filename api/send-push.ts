@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import type { VercelRequest, VercelResponse } from './_types';
 import webpush from 'web-push';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
