@@ -3,7 +3,6 @@ import {
   Bell,
   Clock,
   ChevronDown,
-  Check,
   StopCircle,
   ArrowLeft,
 } from 'lucide-react';
@@ -38,50 +37,24 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
   onBackToCalculator,
 }) => {
   // Local form state
-  const [enabled, setEnabled] = useState<boolean>(reminderState.enabled);
-  const [pushEnabled, setPushEnabled] = useState<boolean>(reminderState.pushEnabled);
   const [duration, setDuration] = useState<number>(reminderState.duration || 25);
   const [unit, setUnit] = useState<'Minutes' | 'Seconds'>(reminderState.unit || 'Minutes');
   const [permissionNotice, setPermissionNotice] = useState<string | null>(null);
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
-  const handlePushToggle = async () => {
-    const nextVal = !pushEnabled;
-    if (nextVal) {
-      const granted = await requestNotificationPermission();
-      if (!granted) {
-        setPermissionNotice('Notification permission is blocked in browser settings.');
-        setPushEnabled(false);
-        return;
-      }
-      setPermissionNotice(null);
-    }
-    setPushEnabled(nextVal);
-  };
-
   const handleSave = async () => {
-    let serverScheduled = false;
-    if (enabled && pushEnabled) {
-      const granted = await requestNotificationPermission();
-      if (!granted) {
-        setPermissionNotice('Please allow notifications in browser settings.');
-      } else {
-        // Schedule server-side Web Push for true background delivery on iPhone & mobile!
-        serverScheduled = await subscribeAndSchedulePush(Math.max(1, duration), unit);
-      }
-    }
-
     const durationSeconds = unit === 'Minutes' ? duration * 60 : duration;
-    const targetTimestamp = enabled ? Date.now() + durationSeconds * 1000 : null;
+    const targetTimestamp = Date.now() + durationSeconds * 1000;
 
+    // Immediately save & start the reminder timer so UI feedback is instantaneous
     onSaveReminder({
-      enabled,
-      pushEnabled,
+      enabled: true,
+      pushEnabled: true,
       soundEnabled: false,
       duration: Math.max(1, duration),
       unit,
       targetTimestamp,
-      serverPushScheduled: serverScheduled,
+      serverPushScheduled: false,
     });
 
     setSavedSuccess(true);
@@ -89,6 +62,30 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
       setSavedSuccess(false);
       onBackToCalculator();
     }, 600);
+
+    // Prompt for notification permission and schedule background Web Push
+    try {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        setPermissionNotice('Please allow notifications in browser settings to receive alerts.');
+      } else {
+        setPermissionNotice(null);
+        const serverScheduled = await subscribeAndSchedulePush(Math.max(1, duration), unit);
+        if (serverScheduled) {
+          onSaveReminder({
+            enabled: true,
+            pushEnabled: true,
+            soundEnabled: false,
+            duration: Math.max(1, duration),
+            unit,
+            targetTimestamp,
+            serverPushScheduled: true,
+          });
+        }
+      }
+    } catch {
+      // ignore
+    }
   };
 
   const formatRemaining = (totalSecs: number) => {
@@ -100,36 +97,18 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
   return (
     <div className="w-full max-w-[480px] mx-auto bg-[#0a1824]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-6 shadow-2xl text-white transition-all duration-300">
       {/* Header Row */}
-      <div className="flex items-center justify-between gap-3 mb-5">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-xl bg-[#09261c] border border-[#14533d] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,153,0.25)] flex-shrink-0 text-[#00e599]">
-            <Bell className="w-6 h-6" />
-          </div>
-          <div>
-            <h2 className="text-xl font-extrabold text-white leading-tight">
-              Break <span className="text-[#00e599]">Reminder</span>
-            </h2>
-            <p className="text-slate-400 text-xs">
-              Get notified when your break time is over.
-            </p>
-          </div>
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-12 h-12 rounded-xl bg-[#09261c] border border-[#14533d] flex items-center justify-center shadow-[0_0_15px_rgba(0,229,153,0.25)] flex-shrink-0 text-[#00e599]">
+          <Bell className="w-6 h-6" />
         </div>
-
-        {/* Master Enable Toggle Switch */}
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
-          onClick={() => setEnabled((prev) => !prev)}
-          className={`w-13 h-7 rounded-full p-1 transition-all duration-300 flex items-center cursor-pointer flex-shrink-0 ${
-            enabled
-              ? 'bg-[#00e599] shadow-[0_0_15px_rgba(0,229,153,0.5)] justify-end'
-              : 'bg-slate-700 justify-start'
-          }`}
-          title={enabled ? 'Reminder is ON' : 'Reminder is OFF'}
-        >
-          <div className="w-5 h-5 rounded-full bg-white shadow-sm" />
-        </button>
+        <div>
+          <h2 className="text-xl font-extrabold text-white leading-tight">
+            Break <span className="text-[#00e599]">Reminder</span>
+          </h2>
+          <p className="text-slate-400 text-xs">
+            Get notified when your break time is over.
+          </p>
+        </div>
       </div>
 
       {/* Active Timer Status Banner (if running) */}
@@ -154,53 +133,6 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
           </button>
         </div>
       )}
-
-      {/* Section: Notification Type */}
-      <div className="mb-4">
-        <label className="block text-xs font-bold text-white mb-2 tracking-wide">
-          Notification Type
-        </label>
-        {/* Push Notification Card */}
-        <div
-          onClick={handlePushToggle}
-          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${
-            pushEnabled
-              ? 'border-[#00e599] bg-[#00e599]/10 shadow-[0_0_15px_rgba(0,229,153,0.15)] ring-1 ring-[#00e599]/50'
-              : 'border-slate-800 bg-[#07131e]/70 hover:border-slate-700 opacity-70'
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                pushEnabled
-                  ? 'bg-[#09261c] border border-[#14533d] text-[#00e599]'
-                  : 'bg-slate-800/80 text-slate-400'
-              }`}
-            >
-              <Bell className="w-5 h-5" />
-            </div>
-            <div>
-              <p className={`text-xs sm:text-sm font-bold ${pushEnabled ? 'text-white' : 'text-slate-300'}`}>
-                Push Notification
-              </p>
-              <p className="text-[10px] sm:text-[11px] text-slate-400 mt-0.5 leading-snug">
-                Delivered to your phone even when locked or app is closed
-              </p>
-            </div>
-          </div>
-
-          <div
-            className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${
-              pushEnabled ? 'border-[#00e599] bg-[#00e599]' : 'border-slate-600'
-            }`}
-          >
-            {pushEnabled && <Check className="w-3.5 h-3.5 text-[#071a12] stroke-[3]" />}
-          </div>
-        </div>
-        {permissionNotice && (
-          <p className="text-[11px] text-amber-400 mt-1.5 font-medium">{permissionNotice}</p>
-        )}
-      </div>
 
       {/* Section: Set Reminder Time */}
       <div className="mb-4">
@@ -270,9 +202,18 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
         </div>
       </div>
 
+      {/* Permission Warning Notice (if blocked by browser) */}
+      {permissionNotice && (
+        <div className="mb-4 p-3 rounded-xl bg-amber-950/60 border border-amber-800/80 text-amber-300 text-xs flex items-center gap-2">
+          <Bell className="w-4 h-4 text-amber-400 flex-shrink-0" />
+          <span>{permissionNotice}</span>
+        </div>
+      )}
+
       {/* Action Buttons */}
       <div className="space-y-2.5">
         <button
+          id="save-reminder-btn"
           type="button"
           onClick={handleSave}
           className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#00b074] to-[#00e599] text-[#071a12] font-extrabold text-sm shadow-[0_0_20px_rgba(0,229,153,0.3)] hover:brightness-110 active:scale-[0.99] transition flex items-center justify-center gap-2 cursor-pointer"
@@ -282,6 +223,7 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
         </button>
 
         <button
+          id="back-to-calculator-btn"
           type="button"
           onClick={onBackToCalculator}
           className="w-full py-2 px-4 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/40 text-xs font-semibold transition flex items-center justify-center gap-1.5 cursor-pointer"

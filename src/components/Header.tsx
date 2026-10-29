@@ -164,6 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Break Reminder Button */}
           <button
+            id="header-break-reminder-btn"
             type="button"
             onClick={onToggleReminderView}
             className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-full border shadow-2xs backdrop-blur-md transition-all cursor-pointer active:scale-95 ${

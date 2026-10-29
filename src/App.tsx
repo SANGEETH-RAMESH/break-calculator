@@ -367,7 +367,7 @@ export const App: React.FC = () => {
             {/* ============================================================== */}
             <div className="hidden lg:flex items-stretch gap-6 w-full">
               {/* Card 1: Calculator Form (Stable 460px width, glides smoothly from center to left) */}
-              <div className="w-[460px] xl:w-[470px] flex-shrink-0 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between h-full min-h-0 z-20 transition-all duration-300">
+              <div className="w-[460px] xl:w-[470px] flex-shrink-0 bg-[#0d1921]/95 backdrop-blur-2xl border border-slate-700/60 rounded-[26px] p-5 sm:p-5.5 shadow-2xl flex flex-col justify-between min-h-0 lg:min-h-[570px] z-20 transition-all duration-300">
                 <CalculatorForm
                   selectedShiftId={selectedShiftId}
                   onSelectShift={handleSelectShift}
@@ -403,12 +403,19 @@ export const App: React.FC = () => {
                   }}
                   onSubmit={handleCalculate}
                   errorMessage={errorMessage}
+                  onToggleReminderView={() =>
+                    setMainView((prev) => (prev === 'reminder' ? 'calculator' : 'reminder'))
+                  }
+                  isReminderRunning={Boolean(
+                    reminderState.targetTimestamp && remainingSeconds !== null && remainingSeconds > 0
+                  )}
+                  remainingSeconds={remainingSeconds}
                 />
               </div>
 
               {/* Card 2: Status Results (emerges smoothly from center to right) */}
               {isCalculated && (
-                <div className="flex-1 min-w-0 flex flex-col h-full min-h-0 animate-desktop-card2-in z-10">
+                <div className="flex-1 min-w-0 flex flex-col min-h-0 lg:min-h-[570px] animate-desktop-card2-in z-10">
                   <ResultsDisplay
                     result={result}
                     animationKey={animationKey}
@@ -460,6 +467,13 @@ export const App: React.FC = () => {
                 }}
                 onSubmit={handleCalculate}
                 errorMessage={errorMessage}
+                onToggleReminderView={() =>
+                  setMainView((prev) => (prev === 'reminder' ? 'calculator' : 'reminder'))
+                }
+                isReminderRunning={Boolean(
+                  reminderState.targetTimestamp && remainingSeconds !== null && remainingSeconds > 0
+                )}
+                remainingSeconds={remainingSeconds}
               />
             </div>
           )}

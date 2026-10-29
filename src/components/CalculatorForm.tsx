@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee, Sun, Sunset, LogIn, Timer } from 'lucide-react';
+import { Calendar, Clock, ArrowRight, X, AlertCircle, ChevronDown, Coffee, Sun, Sunset, LogIn, Timer, Bell } from 'lucide-react';
 import { SHIFT_OPTIONS, getShiftRules } from '../constants/shifts';
 import type { DayType, ShiftHalf } from '../types/shift';
 import {
@@ -27,6 +27,9 @@ interface CalculatorFormProps {
   onChangeWorkedSeconds: (val: string) => void;
   onSubmit: (e: React.FormEvent) => void;
   errorMessage: string | null;
+  onToggleReminderView?: () => void;
+  isReminderRunning?: boolean;
+  remainingSeconds?: number | null;
 }
 
 export const CalculatorForm: React.FC<CalculatorFormProps> = ({
@@ -46,6 +49,9 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
   onChangeWorkedSeconds,
   onSubmit,
   errorMessage,
+  onToggleReminderView,
+  isReminderRunning = false,
+  remainingSeconds = null,
 }) => {
   const [isBtnClicked, setIsBtnClicked] = useState(false);
   const [isCustomLoginOpen, setIsCustomLoginOpen] = useState(false);
@@ -568,20 +574,63 @@ export const CalculatorForm: React.FC<CalculatorFormProps> = ({
           </div>
         )}
 
-        {/* Action Button: Check Break */}
-        <button
-          type="submit"
-          id="check-break-button"
-          className={`w-full bg-[#00e599] hover:bg-[#00d68f] active:scale-[0.98] text-slate-950 font-extrabold py-2.5 sm:py-3 px-5 rounded-xl shadow-[0_0_20px_rgba(0,229,153,0.3)] transition-all duration-200 flex items-center justify-between group cursor-pointer ${
-            isBtnClicked ? 'scale-[0.98] brightness-110' : ''
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Coffee className="w-4 h-4 sm:w-5 sm:h-5 text-slate-950 transition-transform group-hover:scale-110" />
-            <span className="text-sm sm:text-base font-extrabold tracking-wide text-slate-950">Check Break</span>
-          </div>
-          <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 text-slate-950 transition-transform group-hover:translate-x-1" />
-        </button>
+        {/* Action Buttons Split: 1. Break Reminder (Highlighted, First), 2. Check Break */}
+        <div className="grid grid-cols-2 gap-2.5 sm:gap-3">
+          {/* Button 1: Break Reminder (Highlighted First with Hint) */}
+          <button
+            type="button"
+            id="form-break-reminder-button"
+            onClick={onToggleReminderView}
+            className="relative overflow-hidden group flex flex-col justify-center items-start px-3 sm:px-3.5 py-2.5 sm:py-3 rounded-xl border border-[#00e599]/70 hover:border-[#00e599] bg-gradient-to-br from-[#00e599]/20 via-[#00e599]/8 to-transparent hover:from-[#00e599]/30 hover:via-[#00e599]/15 text-left transition-all duration-200 shadow-[0_0_18px_rgba(0,229,153,0.22)] hover:shadow-[0_0_24px_rgba(0,229,153,0.38)] active:scale-[0.98] cursor-pointer"
+            title="Set an alert reminder before your break exceeds the allowed limit"
+          >
+            {/* Top Row: Icon + Label + Pulse Badge */}
+            <div className="flex items-center justify-between w-full mb-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="relative flex h-2 w-2 flex-shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#00e599] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#00e599]"></span>
+                </span>
+                <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#00e599] flex-shrink-0 transition-transform group-hover:scale-110 group-hover:rotate-12" />
+                <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate">Reminder</span>
+              </div>
+              {isReminderRunning && remainingSeconds !== null && remainingSeconds > 0 && (
+                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-[#00e599]/20 text-[#00e599] border border-[#00e599]/40 font-bold flex-shrink-0">
+                  {Math.floor(remainingSeconds / 60)}m
+                </span>
+              )}
+            </div>
+            {/* Bottom Row: Clear Hint describing what it's for */}
+            <p className="text-[10px] sm:text-[11px] text-[#00e599]/90 font-medium leading-tight truncate w-full">
+              {isReminderRunning && remainingSeconds !== null && remainingSeconds > 0
+                ? `Active • ${Math.floor(remainingSeconds / 60)}m ${remainingSeconds % 60}s left`
+                : 'Alert before overbreak'}
+            </p>
+          </button>
+
+          {/* Button 2: Check Break (Primary Calculation Action) */}
+          <button
+            type="submit"
+            id="check-break-button"
+            className={`relative overflow-hidden group flex flex-col justify-center items-start px-3 sm:px-3.5 py-2.5 sm:py-3 rounded-xl bg-[#00e599] hover:bg-[#00d68f] text-slate-950 transition-all duration-200 shadow-[0_0_20px_rgba(0,229,153,0.25)] hover:shadow-[0_0_26px_rgba(0,229,153,0.4)] active:scale-[0.98] cursor-pointer ${
+              isBtnClicked ? 'scale-[0.98] brightness-110' : ''
+            }`}
+            title="Calculate current break usage and expected logout time"
+          >
+            {/* Top Row: Icon + Label + Arrow */}
+            <div className="flex items-center justify-between w-full mb-0.5">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Coffee className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 flex-shrink-0 transition-transform group-hover:scale-110" />
+                <span className="text-xs sm:text-sm font-extrabold text-slate-950 tracking-tight truncate">Check Break</span>
+              </div>
+              <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-950 flex-shrink-0 transition-transform group-hover:translate-x-0.5" />
+            </div>
+            {/* Bottom Row: Hint describing action */}
+            <p className="text-[10px] sm:text-[11px] text-slate-900/80 font-bold leading-tight truncate w-full">
+              View live break status
+            </p>
+          </button>
+        </div>
       </div>
     </form>
   );

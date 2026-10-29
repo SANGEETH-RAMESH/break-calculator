@@ -166,6 +166,58 @@ export function calculateElapsedMinutesBetween(startClock24: string, endClock24:
 }
 
 /**
+ * Calculates effective elapsed minutes for a shift:
+ * - Before shift start: returns 0.
+ * - During shift: returns elapsed minutes from start up to current clock.
+ * - Past scheduled logout: capped at the total shift duration so completed shifts
+ *   do not artificially accumulate infinite break time.
+ */
+export function getShiftElapsedMinutes(
+  startTime24: string,
+  expectedLogout24: string,
+  currentClock24: string
+): number {
+  const parse24 = (t: string) => {
+    const [h, m] = t.split(':').map(Number);
+    return h * 60 + m;
+  };
+
+  const startMin = parse24(startTime24);
+  const logoutMin = parse24(expectedLogout24);
+  const currentMin = parse24(currentClock24);
+
+  const totalShiftDuration = logoutMin >= startMin
+    ? logoutMin - startMin
+    : (1440 - startMin) + logoutMin;
+
+  // Case A: Shift does NOT cross midnight (e.g., 09:00 to 14:00 or 09:00 to 18:00)
+  if (logoutMin >= startMin) {
+    if (currentMin < startMin) {
+      // Before shift started
+      return 0;
+    }
+    if (currentMin >= logoutMin) {
+      // Past shift end: capped at total shift duration
+      return totalShiftDuration;
+    }
+    // During shift
+    return currentMin - startMin;
+  }
+
+  // Case B: Shift crosses midnight (e.g., 16:30 to 02:00)
+  if (currentMin >= startMin) {
+    // Evening portion before midnight
+    return currentMin - startMin;
+  }
+  if (currentMin <= logoutMin) {
+    // Night/early morning portion past midnight
+    return (1440 - startMin) + currentMin;
+  }
+  // Daytime hours between logout and next start: shift is completed
+  return totalShiftDuration;
+}
+
+/**
  * Get current local time in HH:MM 24-hour format.
  */
 export function getCurrentClockTime24(): string {
@@ -213,14 +265,22 @@ export function calculateBreakFromBreakTaken(
   const totalAllowedBreak = rules.allowedBreakMinutes; // 30m or 60m
   const requiredWorkingMinutes = rules.requiredWorkingMinutes; // 270m or 510m / 360m
 
-  const elapsedMinutes = calculateElapsedMinutesBetween(effectiveStartTime, clock24);
-  const breakTaken = Math.max(0, breakTakenMinutes);
-  const breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
-  const excessBreak = Math.max(0, breakTaken - totalAllowedBreak);
+  const elapsedMinutes = getShiftElapsedMinutes(effectiveStartTime, effectiveEndTime, clock24);
+  let breakTaken = Math.max(0, breakTakenMinutes);
+  let breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
+  let excessBreak = Math.max(0, breakTaken - totalAllowedBreak);
 
-  // Real-time worked minutes: elapsed time up to current clock
-  const workedMinutes = Math.max(0, elapsedMinutes);
+  // Real-time worked minutes: elapsed time up to current clock minus break taken
+  const workedMinutes = Math.max(0, elapsedMinutes - breakTaken);
   const workLeftMinutes = Math.max(0, requiredWorkingMinutes - workedMinutes);
+
+  // In half day, if worked hours is equal to or greater than required working hours,
+  // break is NOT a problem: excess break is 0 and status remains on track.
+  if (isHalfDay && workedMinutes >= requiredWorkingMinutes) {
+    excessBreak = 0;
+    breakTaken = Math.min(breakTaken, totalAllowedBreak);
+    breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
+  }
 
   const percentageUsed = totalAllowedBreak > 0
     ? Math.min(100, Math.round((Math.min(breakTaken, totalAllowedBreak) / totalAllowedBreak) * 100))
@@ -366,21 +426,29 @@ export function calculateLiveShiftBreak(
   const requiredWorkingSeconds = requiredWorkingMinutes * 60;
   const workedTotalSeconds = Math.max(0, Math.round(workedMinutes * 60));
 
-  // Elapsed minutes from actual login time to current clock
-  const elapsedMinutes = calculateElapsedMinutesBetween(actualStartTime, clock24);
+  // Shift elapsed minutes: during live shift, elapsed from start to current clock; if shift has completed, capped at shift duration.
+  const elapsedMinutes = getShiftElapsedMinutes(actualStartTime, expectedLogout24, clock24);
   const elapsedTotalSeconds = elapsedMinutes * 60;
 
   let breakTakenTotalSeconds: number;
   if (elapsedTotalSeconds >= workedTotalSeconds) {
     breakTakenTotalSeconds = Math.max(0, elapsedTotalSeconds - workedTotalSeconds);
   } else {
-    // When workedTotalSeconds > elapsedTotalSeconds (e.g. testing full shift duration ahead of current clock)
-    breakTakenTotalSeconds = Math.max(0, workedTotalSeconds - requiredWorkingSeconds);
+    // When workedTotalSeconds > elapsedTotalSeconds (e.g. testing full shift duration ahead of current clock, or working overtime)
+    breakTakenTotalSeconds = 0;
   }
 
-  const breakLeftTotalSeconds = Math.max(0, totalAllowedBreakSeconds - breakTakenTotalSeconds);
-  const excessBreakTotalSeconds = Math.max(0, breakTakenTotalSeconds - totalAllowedBreakSeconds);
+  let breakLeftTotalSeconds = Math.max(0, totalAllowedBreakSeconds - breakTakenTotalSeconds);
+  let excessBreakTotalSeconds = Math.max(0, breakTakenTotalSeconds - totalAllowedBreakSeconds);
   const workLeftTotalSeconds = Math.max(0, requiredWorkingSeconds - workedTotalSeconds);
+
+  // In half day, if worked hours is equal to or greater than required working hours,
+  // break is NOT a problem: excess break is 0, no overbreak alert, and status remains on track.
+  if (isHalfDay && workedTotalSeconds >= requiredWorkingSeconds) {
+    excessBreakTotalSeconds = 0;
+    breakTakenTotalSeconds = Math.min(breakTakenTotalSeconds, totalAllowedBreakSeconds);
+    breakLeftTotalSeconds = Math.max(0, totalAllowedBreakSeconds - breakTakenTotalSeconds);
+  }
 
   const breakTakenMinutes = breakTakenTotalSeconds / 60;
   const breakLeftMinutes = breakLeftTotalSeconds / 60;
@@ -523,10 +591,18 @@ export function calculateBreak(
   const requiredWorkingTime = rules.requiredWorkingMinutes;
   const totalAllowedBreak = rules.allowedBreakMinutes;
 
-  let breakTaken = Math.max(0, workedMinutes - requiredWorkingTime);
-  const excessBreak = Math.max(0, breakTaken - totalAllowedBreak);
-  const breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
+  let breakTaken = Math.max(0, rules.shiftDurationMinutes - workedMinutes);
+  let excessBreak = Math.max(0, breakTaken - totalAllowedBreak);
+  let breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
   const workLeftMinutes = Math.max(0, requiredWorkingTime - workedMinutes);
+
+  // In half day, if worked hours is equal to or greater than required working hours,
+  // break is NOT a problem: excess break is 0 and on track.
+  if (isHalfDay && workedMinutes >= requiredWorkingTime) {
+    excessBreak = 0;
+    breakTaken = Math.min(breakTaken, totalAllowedBreak);
+    breakLeft = Math.max(0, totalAllowedBreak - breakTaken);
+  }
 
   const percentageUsed = totalAllowedBreak > 0
     ? Math.min(100, Math.max(0, Math.round((Math.min(breakTaken, totalAllowedBreak) / totalAllowedBreak) * 100)))

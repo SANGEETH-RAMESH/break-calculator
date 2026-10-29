@@ -72,9 +72,13 @@ export const subscribeAndSchedulePush = async (
   if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
     return false;
   }
-
   try {
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<ServiceWorkerRegistration>((_, reject) =>
+        setTimeout(() => reject(new Error('SW ready timeout')), 2500)
+      ),
+    ]);
     const vapidKey =
       (import.meta as { env?: { VITE_VAPID_PUBLIC_KEY?: string } }).env?.VITE_VAPID_PUBLIC_KEY ||
       'BGDxhWW11WBX2Vr9OXRgBJ68fmxWHJK8s49vtNlj7xHzBJqE6SUARupAJNhLExvOEYh3FcnX40k9w62ViwWRQZo';

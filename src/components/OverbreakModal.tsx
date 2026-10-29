@@ -124,7 +124,7 @@ export const OverbreakModal: React.FC<OverbreakModalProps> = ({
           <img
             src={activeFrame === 0 ? '/overbreak.png' : '/overbreak2.png'}
             alt="Thambi Thappu! Overbreak"
-            className="w-[280px] sm:w-[340px] max-w-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] pointer-events-auto hover:scale-105"
+            className="w-[280px] sm:w-[340px] max-w-full object-contain drop-shadow-[0_0_35px_rgba(255,23,68,0.55)] pointer-events-auto"
           />
         </div>
 
