@@ -141,9 +141,21 @@ export const App: React.FC = () => {
     return () => clearInterval(timerId);
   }, [reminderState]);
 
-  // Listen for background push sound triggers from service worker
+  // Listen for background push sound triggers from service worker or notification click
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    if (typeof window === 'undefined') return;
+
+    // Check if opened directly via a notification click
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('playAlarm') === '1') {
+      playBreakAlertSound();
+      params.delete('playAlarm');
+      const cleanUrl =
+        window.location.pathname + (params.toString() ? `?${params.toString()}` : '');
+      window.history.replaceState({}, '', cleanUrl);
+    }
+
+    if (!('serviceWorker' in navigator)) return;
     const handleServiceWorkerMessage = (event: MessageEvent) => {
       if (event.data && event.data.type === 'PLAY_BREAK_SOUND') {
         playBreakAlertSound();

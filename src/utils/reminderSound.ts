@@ -18,25 +18,113 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
   return false;
 };
 
+// Cached audio instance pre-unlocked during user interactions
+let sharedAudio: HTMLAudioElement | null = null;
+
+export const unlockAudio = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!sharedAudio) {
+      sharedAudio = new Audio('/sounds/break-alert.mp3');
+      sharedAudio.preload = 'auto';
+    }
+    // Briefly play and pause with tiny volume during a user interaction to satisfy autoplay policy
+    sharedAudio.volume = 0.01;
+    const playPromise = sharedAudio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          sharedAudio?.pause();
+          if (sharedAudio) {
+            sharedAudio.currentTime = 0;
+            sharedAudio.volume = 1.0;
+          }
+        })
+        .catch(() => {
+          // Ignore - will reattempt on actual play
+        });
+    }
+  } catch (err) {
+    console.warn('Unlock audio error:', err);
+  }
+};
+
+// Automatically attempt to unlock audio on the very first user tap/click on the document
+if (typeof window !== 'undefined') {
+  const onFirstInteraction = () => {
+    unlockAudio();
+    window.removeEventListener('click', onFirstInteraction);
+    window.removeEventListener('touchstart', onFirstInteraction);
+    window.removeEventListener('keydown', onFirstInteraction);
+  };
+  window.addEventListener('click', onFirstInteraction, { once: true, passive: true });
+  window.addEventListener('touchstart', onFirstInteraction, { once: true, passive: true });
+  window.addEventListener('keydown', onFirstInteraction, { once: true, passive: true });
+}
+
 export const playBreakAlertSound = () => {
   if (typeof window === 'undefined') return;
   try {
+    if (sharedAudio) {
+      sharedAudio.currentTime = 0;
+      sharedAudio.volume = 1.0;
+      const promise = sharedAudio.play();
+      if (promise !== undefined) {
+        promise.catch((err) => {
+          console.warn('Playback of pre-unlocked audio failed, trying fallback:', err);
+          fallbackPlay();
+        });
+        return;
+      }
+    }
+    fallbackPlay();
+  } catch (err) {
+    console.warn('Audio play error:', err);
+    fallbackPlay();
+  }
+};
+
+function fallbackPlay() {
+  try {
     const audio = new Audio('/sounds/break-alert.mp3');
     audio.volume = 1.0;
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        // Fallback to /sound/ path in case folder is singular
-        const fallback = new Audio('/sound/break-alert.mp3');
-        fallback.play().catch((err) => {
-          console.warn('Audio play prevented or file not loaded:', err);
+    const p = audio.play();
+    if (p !== undefined) {
+      p.catch(() => {
+        const alt = new Audio('/sound/break-alert.mp3');
+        alt.volume = 1.0;
+        alt.play().catch(() => {
+          // If browser completely blocks mp3, synthesize a tone via AudioContext
+          playSynthesizedBeep();
         });
       });
     }
-  } catch (err) {
-    console.warn('Audio play error:', err);
+  } catch {
+    playSynthesizedBeep();
   }
-};
+}
+
+function playSynthesizedBeep() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.5, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.8);
+  } catch (err) {
+    console.warn('Synthesized beep failed:', err);
+  }
+}
 
 export const triggerBreakNotification = async (durationText: string) => {
   const title = 'Thambi... time aayiduchu! ⏰';

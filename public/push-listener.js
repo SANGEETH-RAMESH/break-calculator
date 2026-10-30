@@ -39,13 +39,15 @@ self.addEventListener('push', (event) => {
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const urlToOpen = (event.notification.data && event.notification.data.url) || '/';
+  const base = (event.notification.data && event.notification.data.url) || '/';
+  const urlToOpen = base.includes('?') ? `${base}&playAlarm=1` : `${base}?playAlarm=1`;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
       for (let i = 0; i < windowClients.length; i++) {
         const client = windowClients[i];
         if (client.url && 'focus' in client) {
+          client.postMessage({ type: 'PLAY_BREAK_SOUND' });
           return client.focus();
         }
       }

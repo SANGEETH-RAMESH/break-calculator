@@ -11,6 +11,7 @@ import {
   requestNotificationPermission,
   subscribeAndSchedulePush,
   playBreakAlertSound,
+  unlockAudio,
 } from '../utils/reminderSound';
 
 export interface BreakReminderState {
@@ -45,6 +46,9 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
   const [savedSuccess, setSavedSuccess] = useState<boolean>(false);
 
   const handleSave = async () => {
+    // Crucial: Unlock browser audio playback within this direct user click event
+    unlockAudio();
+
     const durationSeconds = unit === 'Minutes' ? duration * 60 : duration;
     const targetTimestamp = Date.now() + durationSeconds * 1000;
 
