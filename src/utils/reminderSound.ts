@@ -25,7 +25,7 @@ export const unlockAudio = () => {
   if (typeof window === 'undefined') return;
   try {
     if (!sharedAudio) {
-      sharedAudio = new Audio('/sounds/break-alert.mp3');
+      sharedAudio = new Audio('/sounds/break-alert1.mp3');
       sharedAudio.preload = 'auto';
     }
     // Briefly play and pause with tiny volume during a user interaction to satisfy autoplay policy
@@ -86,12 +86,12 @@ export const playBreakAlertSound = () => {
 
 function fallbackPlay() {
   try {
-    const audio = new Audio('/sounds/break-alert.mp3');
+    const audio = new Audio('/sounds/break-alert1.mp3');
     audio.volume = 1.0;
     const p = audio.play();
     if (p !== undefined) {
       p.catch(() => {
-        const alt = new Audio('/sound/break-alert.mp3');
+        const alt = new Audio('/sound/break-alert1.mp3');
         alt.volume = 1.0;
         alt.play().catch(() => {
           // If browser completely blocks mp3, synthesize a tone via AudioContext
@@ -145,7 +145,7 @@ export const triggerBreakNotification = async (durationText: string) => {
           tag: 'break-reminder',
           ...({
             vibrate: [300, 150, 300, 150, 300],
-            sound: '/sounds/break-alert.mp3',
+            sound: '/sounds/break-alert1.mp3',
           } as Record<string, unknown>),
         } as NotificationOptions);
         return;
@@ -161,7 +161,7 @@ export const triggerBreakNotification = async (durationText: string) => {
       new Notification(title, {
         body,
         icon: '/logo.png',
-        ...({ sound: '/sounds/break-alert.mp3' } as Record<string, unknown>),
+        ...({ sound: '/sounds/break-alert1.mp3' } as Record<string, unknown>),
       } as NotificationOptions);
     } catch (err) {
       console.warn('Notification failed:', err);
