@@ -17,7 +17,7 @@ self.addEventListener('push', (event) => {
     tag: 'break-reminder',
     requireInteraction: true,
     vibrate: [300, 150, 300, 150, 300],
-    sound: '/sounds/break-alert.mp3',
+    sound: '/sounds/break-alert1.mp3',
     data: {
       url: data.url || '/',
       timestamp: Date.now(),

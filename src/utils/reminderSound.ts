@@ -18,38 +18,71 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
   return false;
 };
 
-// Cached audio instance pre-unlocked during user interactions
-let sharedAudio: HTMLAudioElement | null = null;
+// Web Audio Context & pre-decoded AudioBuffer for low-latency SFX (no media player controls)
+let audioCtx: AudioContext | null = null;
+let notificationAudioBuffer: AudioBuffer | null = null;
+let isPreloading = false;
+
+const getAudioContext = (): AudioContext | null => {
+  if (typeof window === 'undefined') return null;
+  if (!audioCtx) {
+    const AudioConstructor =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (AudioConstructor) {
+      audioCtx = new AudioConstructor();
+    }
+  }
+  return audioCtx;
+};
+
+// Fetch and decode the MP3 into memory so it plays instantly like a system sound effect
+const preloadSoundBuffer = async () => {
+  if (typeof window === 'undefined' || notificationAudioBuffer || isPreloading) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  isPreloading = true;
+  try {
+    const urls = ['/sounds/break-alert1.mp3', '/sound/break-alert1.mp3', '/sounds/break-alert.mp3'];
+    let arrayBuffer: ArrayBuffer | null = null;
+
+    for (const url of urls) {
+      try {
+        const res = await fetch(url);
+        if (res.ok) {
+          arrayBuffer = await res.arrayBuffer();
+          break;
+        }
+      } catch {
+        // try next url
+      }
+    }
+
+    if (arrayBuffer) {
+      notificationAudioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    }
+  } catch (err) {
+    console.warn('Could not decode notification sound buffer:', err);
+  } finally {
+    isPreloading = false;
+  }
+};
 
 export const unlockAudio = () => {
   if (typeof window === 'undefined') return;
   try {
-    if (!sharedAudio) {
-      sharedAudio = new Audio('/sounds/break-alert1.mp3');
-      sharedAudio.preload = 'auto';
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === 'suspended') {
+      ctx.resume();
     }
-    // Briefly play and pause with tiny volume during a user interaction to satisfy autoplay policy
-    sharedAudio.volume = 0.01;
-    const playPromise = sharedAudio.play();
-    if (playPromise !== undefined) {
-      playPromise
-        .then(() => {
-          sharedAudio?.pause();
-          if (sharedAudio) {
-            sharedAudio.currentTime = 0;
-            sharedAudio.volume = 1.0;
-          }
-        })
-        .catch(() => {
-          // Ignore - will reattempt on actual play
-        });
-    }
+    preloadSoundBuffer();
   } catch (err) {
     console.warn('Unlock audio error:', err);
   }
 };
 
-// Automatically attempt to unlock audio on the very first user tap/click on the document
+// Automatically unlock and preload on the very first user interaction
 if (typeof window !== 'undefined') {
   const onFirstInteraction = () => {
     unlockAudio();
@@ -62,42 +95,71 @@ if (typeof window !== 'undefined') {
   window.addEventListener('keydown', onFirstInteraction, { once: true, passive: true });
 }
 
-export const playBreakAlertSound = () => {
+/**
+ * Plays the alert as a punchy, native-feeling notification sound effect (SFX):
+ * - Does NOT trigger browser media player widgets or hijack background music
+ * - Automatically limits duration to ~2.5s with a smooth fade-out so it doesn't drone on like a song
+ */
+export const playBreakAlertSound = (maxDurationSeconds = 2.5) => {
   if (typeof window === 'undefined') return;
-  try {
-    if (sharedAudio) {
-      sharedAudio.currentTime = 0;
-      sharedAudio.volume = 1.0;
-      const promise = sharedAudio.play();
-      if (promise !== undefined) {
-        promise.catch((err) => {
-          console.warn('Playback of pre-unlocked audio failed, trying fallback:', err);
-          fallbackPlay();
-        });
-        return;
+
+  const ctx = getAudioContext();
+  if (ctx && notificationAudioBuffer) {
+    try {
+      if (ctx.state === 'suspended') {
+        ctx.resume();
       }
+
+      const source = ctx.createBufferSource();
+      const gainNode = ctx.createGain();
+
+      source.buffer = notificationAudioBuffer;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+
+      const now = ctx.currentTime;
+      const duration = Math.min(notificationAudioBuffer.duration, maxDurationSeconds);
+
+      // Volume envelope: full volume, then quick smooth fade-out at the end
+      gainNode.gain.setValueAtTime(1.0, now);
+      if (duration > 0.4) {
+        gainNode.gain.setValueAtTime(1.0, now + duration - 0.4);
+        gainNode.gain.linearRampToValueAtTime(0.001, now + duration);
+      }
+
+      source.start(now);
+      source.stop(now + duration);
+      return;
+    } catch (err) {
+      console.warn('Buffer playback error, trying audio element fallback:', err);
     }
-    fallbackPlay();
-  } catch (err) {
-    console.warn('Audio play error:', err);
-    fallbackPlay();
   }
+
+  // Fallback to HTML5 audio if buffer not yet decoded, but cut it short like a notification
+  fallbackShortAudio(maxDurationSeconds);
 };
 
-function fallbackPlay() {
+function fallbackShortAudio(durationSeconds: number) {
   try {
     const audio = new Audio('/sounds/break-alert1.mp3');
     audio.volume = 1.0;
-    const p = audio.play();
-    if (p !== undefined) {
-      p.catch(() => {
-        const alt = new Audio('/sound/break-alert1.mp3');
-        alt.volume = 1.0;
-        alt.play().catch(() => {
-          // If browser completely blocks mp3, synthesize a tone via AudioContext
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          // Stop playback after duration so it doesn't linger like a long song
+          setTimeout(() => {
+            try {
+              audio.pause();
+              audio.currentTime = 0;
+            } catch {
+              // ignore
+            }
+          }, durationSeconds * 1000);
+        })
+        .catch(() => {
           playSynthesizedBeep();
         });
-      });
     }
   } catch {
     playSynthesizedBeep();
@@ -106,21 +168,24 @@ function fallbackPlay() {
 
 function playSynthesizedBeep() {
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    const ctx = new AudioCtx();
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    if (ctx.state === 'suspended') {
+      ctx.resume();
+    }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
+
     osc.type = 'sine';
     osc.frequency.setValueAtTime(880, ctx.currentTime);
-    gain.gain.setValueAtTime(0.5, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+    gain.gain.setValueAtTime(0.6, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+
     osc.connect(gain);
     gain.connect(ctx.destination);
+
     osc.start();
-    osc.stop(ctx.currentTime + 0.8);
+    osc.stop(ctx.currentTime + 0.6);
   } catch (err) {
     console.warn('Synthesized beep failed:', err);
   }
