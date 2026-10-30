@@ -8,7 +8,7 @@ import { CalculatorForm } from './components/CalculatorForm';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { OverbreakModal } from './components/OverbreakModal';
 import { BreakReminderCard, type BreakReminderState } from './components/BreakReminderCard';
-import { triggerBreakNotification } from './utils/reminderSound';
+import { triggerBreakNotification, playBreakAlertSound } from './utils/reminderSound';
 
 const DEFAULT_SHIFT_STORAGE_KEY = 'break_calculator_default_shift';
 const REMINDER_STORAGE_KEY = 'break_calculator_reminder_config';
@@ -111,6 +111,9 @@ export const App: React.FC = () => {
 
       if (diff <= 0) {
         setRemainingSeconds(0);
+        // Play the alert sound when the break timer completes
+        playBreakAlertSound();
+
         // Only trigger local push if server push was NOT already scheduled
         if (reminderState.pushEnabled && !reminderState.serverPushScheduled) {
           triggerBreakNotification(
@@ -137,6 +140,20 @@ export const App: React.FC = () => {
     const timerId = setInterval(checkTimer, 1000);
     return () => clearInterval(timerId);
   }, [reminderState]);
+
+  // Listen for background push sound triggers from service worker
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+    const handleServiceWorkerMessage = (event: MessageEvent) => {
+      if (event.data && event.data.type === 'PLAY_BREAK_SOUND') {
+        playBreakAlertSound();
+      }
+    };
+    navigator.serviceWorker.addEventListener('message', handleServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', handleServiceWorkerMessage);
+    };
+  }, []);
 
   const handleSaveReminder = (newState: BreakReminderState) => {
     setReminderState(newState);

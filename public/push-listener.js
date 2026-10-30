@@ -16,13 +16,25 @@ self.addEventListener('push', (event) => {
     badge: '/logo.png',
     tag: 'break-reminder',
     requireInteraction: true,
+    vibrate: [300, 150, 300, 150, 300],
+    sound: '/sounds/break-alert.mp3',
     data: {
       url: data.url || '/',
       timestamp: Date.now(),
     },
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  // Broadcast to all open tabs/windows to play the alert sound immediately
+  const notifyClients = self.clients
+    .matchAll({ type: 'window', includeUncontrolled: true })
+    .then((windowClients) => {
+      windowClients.forEach((client) => {
+        client.postMessage({ type: 'PLAY_BREAK_SOUND' });
+      });
+    })
+    .catch((err) => console.warn('Could not postMessage to clients:', err));
+
+  event.waitUntil(Promise.all([self.registration.showNotification(title, options), notifyClients]));
 });
 
 self.addEventListener('notificationclick', (event) => {

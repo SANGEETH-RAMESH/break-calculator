@@ -18,9 +18,32 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
   return false;
 };
 
+export const playBreakAlertSound = () => {
+  if (typeof window === 'undefined') return;
+  try {
+    const audio = new Audio('/sounds/break-alert.mp3');
+    audio.volume = 1.0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        // Fallback to /sound/ path in case folder is singular
+        const fallback = new Audio('/sound/break-alert.mp3');
+        fallback.play().catch((err) => {
+          console.warn('Audio play prevented or file not loaded:', err);
+        });
+      });
+    }
+  } catch (err) {
+    console.warn('Audio play error:', err);
+  }
+};
+
 export const triggerBreakNotification = async (durationText: string) => {
   const title = 'Thambi... time aayiduchu! ⏰';
   const body = `Your ${durationText} break is over.\nTime to get back to work! 💪`;
+
+  // Always play the custom alert sound immediately
+  playBreakAlertSound();
 
   // Try service worker notification first (better background support)
   if ('serviceWorker' in navigator) {
@@ -32,7 +55,10 @@ export const triggerBreakNotification = async (durationText: string) => {
           icon: '/logo.png',
           badge: '/logo.png',
           tag: 'break-reminder',
-          ...({ vibrate: [300, 150, 300, 150, 300] } as Record<string, unknown>),
+          ...({
+            vibrate: [300, 150, 300, 150, 300],
+            sound: '/sounds/break-alert.mp3',
+          } as Record<string, unknown>),
         } as NotificationOptions);
         return;
       }
@@ -47,7 +73,8 @@ export const triggerBreakNotification = async (durationText: string) => {
       new Notification(title, {
         body,
         icon: '/logo.png',
-      });
+        ...({ sound: '/sounds/break-alert.mp3' } as Record<string, unknown>),
+      } as NotificationOptions);
     } catch (err) {
       console.warn('Notification failed:', err);
     }

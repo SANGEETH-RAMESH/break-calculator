@@ -32,6 +32,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         `Your ${duration || 25} ${(unit || 'Minutes').toLowerCase()} break is over.\nTime to get back to work! 💪`,
       icon: '/logo.png',
       badge: '/logo.png',
+      sound: '/sounds/break-alert.mp3',
       vibrate: [300, 150, 300, 150, 300],
       url: '/',
     });

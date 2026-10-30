@@ -5,10 +5,12 @@ import {
   ChevronDown,
   StopCircle,
   ArrowLeft,
+  Volume2,
 } from 'lucide-react';
 import {
   requestNotificationPermission,
   subscribeAndSchedulePush,
+  playBreakAlertSound,
 } from '../utils/reminderSound';
 
 export interface BreakReminderState {
@@ -177,9 +179,20 @@ export const BreakReminderCard: React.FC<BreakReminderCardProps> = ({
 
       {/* Section: Reminder Preview */}
       <div className="mb-5">
-        <label className="block text-xs font-bold text-white mb-2 tracking-wide">
-          Reminder Preview
-        </label>
+        <div className="flex items-center justify-between mb-2">
+          <label className="block text-xs font-bold text-white tracking-wide">
+            Reminder Preview
+          </label>
+          <button
+            type="button"
+            onClick={() => playBreakAlertSound()}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#00e599]/10 hover:bg-[#00e599]/20 text-[#00e599] border border-[#00e599]/30 text-[11px] font-semibold transition active:scale-95 cursor-pointer"
+            title="Click to test alert sound"
+          >
+            <Volume2 className="w-3.5 h-3.5" />
+            <span>Test Sound</span>
+          </button>
+        </div>
         <div className="bg-[#05101a]/90 border border-slate-800 rounded-xl p-4 shadow-inner">
           <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
